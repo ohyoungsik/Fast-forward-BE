@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/baseP_Fast-Forward_Team/project_files/fast-forward-FE/src/**)",
+      "Bash(Get-ChildItem -Path \"D:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-FE\\\\src\" -Recurse)",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}

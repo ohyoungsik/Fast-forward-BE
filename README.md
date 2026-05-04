@@ -203,6 +203,144 @@ docker-compose up --build
 
 ---
 
+## 🔐 JWT 인증 API (Backend)
+
+Base URL: `http://localhost:8000/api/v1`
+
+### 엔드포인트
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `GET /auth/me`
+
+### DB 테이블 생성 방법
+
+- **local + DEBUG=true** 인 경우 서버 시작 시 자동으로 테이블을 생성합니다. (`app/main.py` 참고)
+- 이미 기존 DB/볼륨이 있고 스키마가 달라 충돌한다면, 로컬 개발에서는 **DB를 비우고 다시 생성**하세요.
+  - Docker 사용 시: `docker-compose down -v` 후 `docker-compose up --build`
+
+### Postman 테스트 예시
+
+#### 1) 회원가입
+
+`POST /auth/register`  
+Body (JSON):
+
+```json
+{
+  "name": "홍길동",
+  "username": "testuser",
+  "password": "1234",
+  "email": "test@example.com"
+}
+```
+
+Response:
+
+```json
+{
+  "message": "회원가입이 완료되었습니다."
+}
+```
+
+#### 2) 로그인 (토큰 발급)
+
+`POST /auth/login`  
+Body (JSON):
+
+```json
+{
+  "username": "testuser",
+  "password": "1234"
+}
+```
+
+Response:
+
+```json
+{
+  "accessToken": "access-token",
+  "refreshToken": "refresh-token",
+  "tokenType": "bearer"
+}
+```
+
+#### 3) /me (Access Token 인증)
+
+`GET /auth/me`  
+Header:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Response:
+
+```json
+{
+  "id": 1,
+  "name": "홍길동",
+  "username": "testuser",
+  "email": "test@example.com"
+}
+```
+
+#### 4) Access Token 재발급 (Refresh Token)
+
+`POST /auth/refresh`  
+Body (JSON):
+
+```json
+{
+  "refreshToken": "refresh-token"
+}
+```
+
+Response:
+
+```json
+{
+  "accessToken": "new-access-token",
+  "refreshToken": "new-refresh-token"
+}
+```
+
+#### 5) 로그아웃 (Refresh Token revoke)
+
+`POST /auth/logout`  
+Header:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Body (JSON):
+
+```json
+{
+  "refreshToken": "refresh-token"
+}
+```
+
+Response: `204 No Content`
+
+### JWT 테스트 방법
+
+- Access Token을 `Authorization: Bearer <token>` 헤더로 넘기고 `/auth/me`를 호출해 검증합니다.
+- Refresh Token은 **바디**의 `refreshToken` 필드로만 전달합니다. (헤더로 전달하지 않음)
+
+### 422 에러 디버깅 방법
+
+- FastAPI의 `422 Unprocessable Entity`는 대부분 **요청 Body/필드명 불일치** 또는 **타입 불일치**입니다.
+- 이 프로젝트의 인증 API는 프론트 요구사항에 맞춰 **camelCase** 필드를 사용합니다:
+  - `accessToken`, `refreshToken`, `tokenType`
+  - Request도 `refreshToken`처럼 정확히 맞춰야 합니다.
+- 응답의 `detail`에 어떤 필드가 누락/오류인지 나오므로 Postman에서 **Response Body**를 먼저 확인하세요.
+
+---
+
 ## 🧪 테스트
 
 ```bash

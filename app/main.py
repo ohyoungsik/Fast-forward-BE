@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
             from app.db.base import Base
             from app.models import user  # noqa: F401  (import for model registration)
             from app.models import log
+            from app.models import refresh_token
             Base.metadata.create_all(bind=engine)
 
     return app
