@@ -32,7 +32,15 @@ htmlcov/
 
 .env
 config/*.env
+!config/*.env.example
 !.gitkeep
+
+# SSH keys / certificates
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
 
 *.log
 
