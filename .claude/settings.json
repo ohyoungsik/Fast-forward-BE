@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src\\api",
+      "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src\\components",
+      "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src\\pages"
+    ]
+  }
+}
