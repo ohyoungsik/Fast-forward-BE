@@ -36,3 +36,17 @@ class SecurityLogItem(BaseModel):
     status_code: str
     message: str
     service: str = "nginx"
+
+
+class AppLogItem(BaseModel):
+    id: int
+    server_name: Optional[str] = None
+    log_type: str
+    level: str
+    client_ip: Optional[str] = None
+    method: Optional[str] = None
+    path: Optional[str] = None
+    status_code: Optional[str] = None
+    response_time_ms: Optional[int] = None
+    message: Optional[str] = None
+    collected_at: str

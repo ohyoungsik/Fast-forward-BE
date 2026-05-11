@@ -46,3 +46,32 @@ ON server_metrics (
 );
 
 CREATE INDEX ON server_metrics (server_id, metric_type, collected_at DESC);
+
+-- =========================================
+-- 3. Web Application 로그 통합 테이블
+-- =========================================
+
+CREATE TABLE app_logs (
+    id BIGSERIAL PRIMARY KEY,
+
+    -- nginx-fe-server, fastapi-be-server 등
+    server_name VARCHAR(50),
+
+    -- nginx_access / nginx_error / fastapi_error
+    log_type VARCHAR(30) NOT NULL,
+
+    -- INFO / WARN / ERROR / CRITICAL
+    level VARCHAR(10) NOT NULL,
+
+    client_ip VARCHAR(50),
+    method VARCHAR(10),
+    path TEXT,
+    status_code VARCHAR(10),
+    response_time_ms INT,
+    message TEXT,
+
+    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_app_logs_collected_at ON app_logs (collected_at DESC);
+CREATE INDEX idx_app_logs_server_type  ON app_logs (server_name, log_type);

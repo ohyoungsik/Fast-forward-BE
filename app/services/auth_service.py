@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.models.app_log import AppLog
 from app.repositories import refresh_token_repository, user_repository
 from app.schemas.auth_schema import (
     LoginRequest,
@@ -18,6 +19,21 @@ from app.schemas.auth_schema import (
     TokenResponse,
 )
 from app.utils.common import get_password_hash, verify_password
+
+
+def _add_auth_log(db: Session, *, message: str, level: str = "INFO", path: str, status_code: str) -> None:
+    # 인증 관련 이벤트(로그인/토큰갱신/로그아웃)를 app_logs 테이블에 기록
+    db.add(AppLog(
+        server_name="fastapi-be-server",
+        log_type="auth_login",
+        level=level,
+        method="POST",
+        path=path,
+        status_code=status_code,
+        message=message,
+        collected_at=datetime.utcnow(),
+    ))
+    db.commit()
 
 
 def register(db: Session, payload: RegisterRequest) -> None:
@@ -39,10 +55,13 @@ def register(db: Session, payload: RegisterRequest) -> None:
 def login(db: Session, payload: LoginRequest) -> TokenResponse:
     user = user_repository.get_user_by_username(db, payload.username)
     if user is None:
+        _add_auth_log(db, level="WARN", message=f"로그인 실패 | user: {payload.username} | 존재하지 않는 유저", path="/api/v1/auth/login", status_code="401")
         raise HTTPException(status_code=status.HTTP_401_NOT_FOUND, detail="유저가 존재하지 않음 User not found")
     if not user.is_active:
+        _add_auth_log(db, level="WARN", message=f"로그인 실패 | user: {user.username} | 비활성화 계정", path="/api/v1/auth/login", status_code="403")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     if not verify_password(payload.password, user.password_hash):
+        _add_auth_log(db, level="WARN", message=f"로그인 실패 | user: {user.username} | 비밀번호 불일치", path="/api/v1/auth/login", status_code="401")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     access_token = create_access_token(username=user.username, user_id=user.id)
@@ -56,6 +75,7 @@ def login(db: Session, payload: LoginRequest) -> TokenResponse:
         expires_at=expires_at,
     )
 
+    _add_auth_log(db, message=f"로그인 성공 | user: {user.username}", path="/api/v1/auth/login", status_code="200")
     return TokenResponse(accessToken=access_token, refreshToken=refresh_token, tokenType="bearer")
 
 
@@ -100,6 +120,7 @@ def refresh(db: Session, payload: RefreshRequest) -> RefreshResponse:
         expires_at=expires_at,
     )
 
+    _add_auth_log(db, message=f"토큰 갱신 | user: {username}", path="/api/v1/auth/refresh", status_code="200")
     return RefreshResponse(accessToken=new_access, refreshToken=new_refresh)
 
 
@@ -108,6 +129,7 @@ def logout(db: Session, *, user_id: int, refresh_token: str) -> None:
     if rt is None or rt.revoked or rt.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     refresh_token_repository.revoke_refresh_token(db, refresh_token=refresh_token)
+    _add_auth_log(db, message=f"로그아웃 | user_id: {user_id}", path="/api/v1/auth/logout", status_code="204")
 
 
 def me_response(user) -> MeResponse:
