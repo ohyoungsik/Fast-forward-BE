@@ -38,30 +38,33 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # 2) Secrets 에 저장된 PEM 키를 파일로 저장하고 권한 설정
-      #    chmod 600 : SSH 는 키 파일 권한이 너무 열려 있으면 접속 거부함
-      - name: Setup SSH key
+      # 2) PEM 키 저장 + SSH config 생성
+      #    SSH config 에서 각 홉(Bastion, private 서버) 마다 설정을 명시해
+      #    ProxyJump 경유 시 host key 체크 문제를 방지한다
+      - name: Setup SSH key and config
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/bastion_key.pem
           chmod 600 ~/.ssh/bastion_key.pem
 
-      # 3) Bastion 서버의 호스트 키를 known_hosts 에 등록
-      #    등록하지 않으면 "Host key verification failed" 로 접속 실패
-      - name: Add bastion host to known_hosts
-        run: |
-          ssh-keyscan -H $BASTION_HOST >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config << EOF
+          Host bastion
+            HostName $BASTION_HOST
+            User $BASTION_USER
+            IdentityFile ~/.ssh/bastion_key.pem
+            StrictHostKeyChecking no
 
-      # 4) ProxyJump(-J) 로 Bastion 을 경유해 fastapi-be-server 에 배포
-      #
-      #    기존 2단계 SSH 방식의 문제:
-      #      GitHub Actions → Bastion (키 사용 ✓) → private 서버 (키 없음 ✗)
-      #      Bastion 서버 자체에 PEM 키가 없어 두 번째 접속에서 Permission denied 발생
-      #
-      #    ProxyJump 방식:
-      #      -J $BASTION_USER@$BASTION_HOST 옵션으로 Bastion 을 투명하게 경유
-      #      PEM 키를 GitHub Actions Runner 에서 두 홉 모두에 직접 사용
-      #      흐름: GitHub Actions ─(PEM)→ Bastion ─(동일 PEM)→ fastapi-be-server
+          Host fastapi-server
+            HostName $FASTAPI_PRIVATE_IP
+            User ubuntu
+            IdentityFile ~/.ssh/bastion_key.pem
+            ProxyJump bastion
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 ~/.ssh/config
+
+      # 3) SSH config 의 fastapi-server 별칭으로 바로 접속해 배포
+      #    흐름: GitHub Actions ─(PEM)→ bastion ─(동일 PEM, ProxyJump)→ fastapi-be-server
       #
       #    배포 절차:
       #      git pull      : main 브랜치 최신 코드로 업데이트
@@ -70,10 +73,7 @@ jobs:
       #      systemctl     : FastAPI 서비스 재시작 (systemd 등록 필요)
       - name: Deploy Backend to fastapi-be-server
         run: |
-          ssh -i ~/.ssh/bastion_key.pem \
-            -J $BASTION_USER@$BASTION_HOST \
-            -o StrictHostKeyChecking=no \
-            ubuntu@$FASTAPI_PRIVATE_IP \
+          ssh fastapi-server \
             'set -e &&
              cd ~/backend &&
              git pull origin main &&
