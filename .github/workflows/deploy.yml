@@ -49,8 +49,16 @@ jobs:
         run: |
           ssh-keyscan -H $BASTION_HOST >> ~/.ssh/known_hosts
 
-      # 4) Bastion 을 경유해 fastapi-be-server 에 접속 후 배포 수행
-      #    흐름: GitHub Actions → (SSH) → Bastion → (SSH) → fastapi-be-server
+      # 4) ProxyJump(-J) 로 Bastion 을 경유해 fastapi-be-server 에 배포
+      #
+      #    기존 2단계 SSH 방식의 문제:
+      #      GitHub Actions → Bastion (키 사용 ✓) → private 서버 (키 없음 ✗)
+      #      Bastion 서버 자체에 PEM 키가 없어 두 번째 접속에서 Permission denied 발생
+      #
+      #    ProxyJump 방식:
+      #      -J $BASTION_USER@$BASTION_HOST 옵션으로 Bastion 을 투명하게 경유
+      #      PEM 키를 GitHub Actions Runner 에서 두 홉 모두에 직접 사용
+      #      흐름: GitHub Actions ─(PEM)→ Bastion ─(동일 PEM)→ fastapi-be-server
       #
       #    배포 절차:
       #      git pull      : main 브랜치 최신 코드로 업데이트
@@ -59,14 +67,14 @@ jobs:
       #      systemctl     : FastAPI 서비스 재시작 (systemd 등록 필요)
       - name: Deploy Backend to fastapi-be-server
         run: |
-          ssh -i ~/.ssh/bastion_key.pem -o StrictHostKeyChecking=no \
-            $BASTION_USER@$BASTION_HOST \
-            "ssh -o StrictHostKeyChecking=no ubuntu@$FASTAPI_PRIVATE_IP '
-              set -e
-              cd ~/backend &&
-              git pull origin main &&
-              cp .env.prod .env &&
-              source venv/bin/activate &&
-              pip install -r requirements.txt &&
-              sudo systemctl restart fastapi
-            '"
+          ssh -i ~/.ssh/bastion_key.pem \
+            -J $BASTION_USER@$BASTION_HOST \
+            -o StrictHostKeyChecking=no \
+            ubuntu@$FASTAPI_PRIVATE_IP \
+            'set -e &&
+             cd ~/backend &&
+             git pull origin main &&
+             cp .env.prod .env &&
+             source venv/bin/activate &&
+             pip install -r requirements.txt &&
+             sudo systemctl restart fastapi'
