@@ -41,14 +41,14 @@ jobs:
             --exclude='venv' \
             --exclude='__pycache__' \
             --exclude='.env' \
-            -czf backend.tar.gz .
+            -czf /tmp/backend.tar.gz .
 
       - name: Upload backend to private server
         run: |
           scp -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
             -o ProxyJump=$BASTION_USER@$BASTION_HOST \
-            backend.tar.gz \
+            /tmp/backend.tar.gz \
             $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/backend.tar.gz
 
       - name: Deploy on private server
