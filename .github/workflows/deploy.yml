@@ -34,7 +34,7 @@ jobs:
             $BASTION_USER@$BASTION_HOST \
             "echo 'Bastion connected successfully'"
 
-      # ENV_PROD Secret 에 .env.prod 파일 내용 전체를 붙여넣기
+      # ENV_PROD Secret 에 .env.prod 파일 내용 전체를 붙여넣기 수정
       # GitHub Secrets 등록: Settings → Secrets → New secret
       #   Name  : ENV_PROD
       #   Value : .env.prod 파일 내용 전체 (멀티라인 그대로 붙여넣기)
