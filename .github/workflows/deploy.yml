@@ -13,26 +13,34 @@ jobs:
       BASTION_HOST: ${{ secrets.BASTION_HOST }}
       BASTION_USER: ${{ secrets.BASTION_USER }}
       BASTION_KEY: ${{ secrets.BASTION_KEY }}
+
       FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
       FASTAPI_USER: ${{ secrets.FASTAPI_USER }}
+
       ENV_PROD: ${{ secrets.ENV_PROD }}
+
       APP_DIR: /var/www/fastapi_app
-      SERVICE_NAME: fastapi
 
     steps:
+      # 1. GitHub 소스 체크아웃
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      # 2. SSH 키 설정
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
+
           echo "$BASTION_KEY" > ~/.ssh/bastion_key.pem
+
           chmod 600 ~/.ssh/bastion_key.pem
 
+      # 3. .env 파일 생성
       - name: Create env file
         run: |
           echo "$ENV_PROD" > /tmp/.env
 
+      # 4. Bastion 접속 테스트
       - name: Test SSH connection to Bastion
         run: |
           ssh -i ~/.ssh/bastion_key.pem \
@@ -40,6 +48,7 @@ jobs:
             $BASTION_USER@$BASTION_HOST \
             "echo 'Bastion connected successfully'"
 
+      # 5. backend 압축
       - name: Package backend source
         run: |
           tar \
@@ -50,6 +59,7 @@ jobs:
             --exclude='.env' \
             -czf /tmp/backend.tar.gz .
 
+      # 6. Bastion 서버로 backend 업로드
       - name: Upload backend package to Bastion
         run: |
           scp -i ~/.ssh/bastion_key.pem \
@@ -57,6 +67,7 @@ jobs:
             /tmp/backend.tar.gz \
             $BASTION_USER@$BASTION_HOST:/tmp/backend.tar.gz
 
+      # 7. Bastion 서버로 env 업로드
       - name: Upload env file to Bastion
         run: |
           scp -i ~/.ssh/bastion_key.pem \
@@ -64,39 +75,99 @@ jobs:
             /tmp/.env \
             $BASTION_USER@$BASTION_HOST:/tmp/.env
 
+      # 8. Bastion → Private FastAPI 서버로 파일 전달
       - name: Upload files from Bastion to FastAPI server
         run: |
           eval $(ssh-agent -s)
+
           ssh-add ~/.ssh/bastion_key.pem
 
           ssh -A -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
             $BASTION_USER@$BASTION_HOST \
-            "scp -o StrictHostKeyChecking=no /tmp/backend.tar.gz /tmp/.env $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/"
+            "scp \
+              -o StrictHostKeyChecking=no \
+              /tmp/backend.tar.gz \
+              /tmp/.env \
+              $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/"
 
+      # 9. FastAPI 서버 배포
       - name: Deploy on FastAPI server
         run: |
           eval $(ssh-agent -s)
+
           ssh-add ~/.ssh/bastion_key.pem
 
           ssh -A -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
             $BASTION_USER@$BASTION_HOST \
-            "ssh -o StrictHostKeyChecking=no $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
-              'set -e &&
-              sudo mkdir -p /var/www/fastapi_app &&
-              sudo tar -xzf /tmp/backend.tar.gz -C /var/www/fastapi_app &&
-              sudo mv /tmp/.env /var/www/fastapi_app/.env &&
-              cd /var/www/fastapi_app &&
-              sudo apt update &&
-              sudo apt install -y python3.12-venv python3-pip &&
-              sudo rm -rf venv &&
-              sudo python3 -m venv venv &&
-              sudo /var/www/fastapi_app/venv/bin/pip install --upgrade pip &&
-              sudo /var/www/fastapi_app/venv/bin/pip install -r requirements.txt &&
-              sudo chown -R www-data:www-data /var/www/fastapi_app &&
-              sudo cp /var/www/fastapi_app/scripts/fastapi.service /etc/systemd/system/fastapi.service &&
-              sudo systemctl daemon-reload &&
-              sudo systemctl enable fastapi.service &&
-              sudo systemctl restart fastapi.service &&
-              sudo systemctl status fastapi.service --no-pager'"
+            "ssh \
+              -o StrictHostKeyChecking=no \
+              $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
+              '
+              set -e
+
+              echo \"===== DEPLOY START =====\"
+
+              sudo mkdir -p $APP_DIR
+
+              echo \"===== EXTRACT FILES =====\"
+
+              sudo tar -xzf /tmp/backend.tar.gz -C $APP_DIR
+
+              echo \"===== MOVE ENV =====\"
+
+              sudo mv /tmp/.env $APP_DIR/.env
+
+              echo \"===== INSTALL PACKAGE =====\"
+
+              sudo apt update
+
+              sudo apt install -y \
+                python3-pip \
+                python3.12-venv
+
+              echo \"===== CREATE VENV =====\"
+
+              cd $APP_DIR
+
+              sudo rm -rf venv
+
+              sudo python3 -m venv venv
+
+              echo \"===== INSTALL REQUIREMENTS =====\"
+
+              sudo $APP_DIR/venv/bin/pip install --upgrade pip
+
+              sudo $APP_DIR/venv/bin/pip install -r requirements.txt
+
+              echo \"===== CHANGE OWNER =====\"
+
+              sudo chown -R www-data:www-data $APP_DIR
+
+              echo \"===== SYSTEMD RELOAD =====\"
+
+              sudo systemctl daemon-reload
+
+              echo \"===== ENABLE FASTAPI =====\"
+
+              sudo systemctl enable fastapi.service
+
+              echo \"===== RESTART FASTAPI =====\"
+
+              sudo systemctl restart fastapi.service
+
+              sleep 3
+
+              echo \"===== FASTAPI STATUS =====\"
+
+              sudo systemctl status fastapi.service --no-pager || true
+
+              echo \"===== FASTAPI LOG =====\"
+
+              sudo journalctl -u fastapi.service \
+                -n 50 \
+                --no-pager
+
+              echo \"===== DEPLOY END =====\"
+              '"
