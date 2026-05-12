@@ -38,7 +38,7 @@ jobs:
         - name: Checkout source code
           uses: actions/checkout@v4
 
-        # 2) Secrets 에 저장된 PEM 키를 파일로 저장하고 권한 설정
+        # 2) Secrets 에 저장된 PEM 키를 파일로 저장하고 권한 설정 ttt
         #    chmod 600 : SSH 는 키 파일 권한이 너무 열려 있으면 접속 거부함
         - name: Setup SSH key
           run: |
