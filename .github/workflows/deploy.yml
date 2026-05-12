@@ -13,6 +13,8 @@ jobs:
       BASTION_HOST: ${{ secrets.BASTION_HOST }}
       BASTION_USER: ${{ secrets.BASTION_USER }}
       FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
+      FASTAPI_USER: ubuntu
+      APP_DIR: /home/ubuntu/backend
 
     steps:
       - name: Checkout source code
@@ -31,19 +33,37 @@ jobs:
             $BASTION_USER@$BASTION_HOST \
             "echo 'Bastion connected successfully'"
 
-      - name: Deploy Backend to fastapi-be-server
+      - name: Package backend source
         run: |
-          eval $(ssh-agent -s)
-          ssh-add ~/.ssh/bastion_key.pem
+          tar \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='venv' \
+            --exclude='__pycache__' \
+            --exclude='.env' \
+            -czf backend.tar.gz .
 
-          ssh -A -i ~/.ssh/bastion_key.pem \
+      - name: Upload backend to private server
+        run: |
+          scp -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
-            $BASTION_USER@$BASTION_HOST \
-            "ssh -o StrictHostKeyChecking=no ubuntu@$FASTAPI_PRIVATE_IP \
-              'set -e &&
-               cd ~/backend &&
-               git pull origin main &&
-               cp .env.prod .env &&
-               source venv/bin/activate &&
-               pip install -r requirements.txt &&
-               sudo systemctl restart fastapi'"
+            -o ProxyJump=$BASTION_USER@$BASTION_HOST \
+            backend.tar.gz \
+            $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/backend.tar.gz
+
+      - name: Deploy on private server
+        run: |
+          ssh -i ~/.ssh/bastion_key.pem \
+            -o StrictHostKeyChecking=no \
+            -o ProxyJump=$BASTION_USER@$BASTION_HOST \
+            $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
+            "set -e &&
+             mkdir -p $APP_DIR &&
+             tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
+             cd $APP_DIR &&
+             cp .env.prod .env &&
+             python3 -m venv venv &&
+             source venv/bin/activate &&
+             pip install --upgrade pip &&
+             pip install -r requirements.txt &&
+             sudo systemctl restart fastapi"
