@@ -1,0 +1,72 @@
+name: Deploy Backend
+
+# main 브랜치에 push(merge) 될 때만 자동 실행
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # ── GitHub Secrets 에 등록된 값을 환경변수로 주입 ─────────────────────────
+    # Repository → Settings → Secrets and variables → Actions 에서 등록
+    #
+    #   BASTION_HOST       : Bastion EC2 의 퍼블릭 IP (예: 3.38.253.68)
+    #                        Bastion = 점프 서버. Private Subnet 의 서버들은
+    #                        인터넷에서 직접 접근 불가하므로 이 서버를 경유함
+    #                        ※ 탄력적 IP 가 아니면 EC2 재시작 시 변경 → Secret 도 갱신 필요
+    #
+    #   BASTION_USER       : Bastion EC2 의 SSH 사용자명 (보통 ubuntu 또는 ec2-user)
+    #
+    #   BASTION_KEY        : EC2 접속용 PEM 키 파일의 내용 (-----BEGIN RSA PRIVATE KEY----- 포함)
+    #                        cat ~/your-key.pem 결과를 통째로 Secret 에 붙여넣기
+    #
+    #   FASTAPI_PRIVATE_IP : fastapi-be-server 의 Private IP (예: 172.16.20.20)
+    #                        Bastion 과 같은 VPC 내부이므로 Private IP 로 접근
+    env:
+      BASTION_HOST: ${{ secrets.BASTION_HOST }}
+      BASTION_USER: ${{ secrets.BASTION_USER }}
+      FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
+
+    steps:
+      # 1) 현재 레포지토리 코드를 Actions Runner 에 체크아웃
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # 2) Secrets 에 저장된 PEM 키를 파일로 저장하고 권한 설정
+      #    chmod 600 : SSH 는 키 파일 권한이 너무 열려 있으면 접속 거부함
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/bastion_key.pem
+          chmod 600 ~/.ssh/bastion_key.pem
+
+      # 3) Bastion 서버의 호스트 키를 known_hosts 에 등록
+      #    등록하지 않으면 "Host key verification failed" 로 접속 실패
+      - name: Add bastion host to known_hosts
+        run: |
+          ssh-keyscan -H $BASTION_HOST >> ~/.ssh/known_hosts
+
+      # 4) Bastion 을 경유해 fastapi-be-server 에 접속 후 배포 수행
+      #    흐름: GitHub Actions → (SSH) → Bastion → (SSH) → fastapi-be-server
+      #
+      #    배포 절차:
+      #      git pull      : main 브랜치 최신 코드로 업데이트
+      #      cp .env.prod  : 서버에 보관 중인 운영 환경변수 파일 적용
+      #      pip install   : 새로운 패키지 의존성 반영
+      #      systemctl     : FastAPI 서비스 재시작 (systemd 등록 필요)
+      - name: Deploy Backend to fastapi-be-server
+        run: |
+          ssh -i ~/.ssh/bastion_key.pem -o StrictHostKeyChecking=no \
+            $BASTION_USER@$BASTION_HOST \
+            "ssh -o StrictHostKeyChecking=no ubuntu@$FASTAPI_PRIVATE_IP '
+              set -e
+              cd ~/backend &&
+              git pull origin main &&
+              cp .env.prod .env &&
+              source venv/bin/activate &&
+              pip install -r requirements.txt &&
+              sudo systemctl restart fastapi
+            '"
