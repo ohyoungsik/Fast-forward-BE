@@ -88,16 +88,18 @@ jobs:
             -o StrictHostKeyChecking=no \
             $BASTION_USER@$BASTION_HOST \
             "ssh -o StrictHostKeyChecking=no $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
-              'set -e &&
-               mkdir -p $APP_DIR &&
-               tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
-               mv /tmp/.env $APP_DIR/.env &&
-               cd $APP_DIR &&
-               sudo apt update &&
-               sudo apt install -y python3.12-venv python3-pip &&
-               rm -rf venv &&
-               python3 -m venv venv &&
-               source venv/bin/activate &&
-               pip install --upgrade pip &&
-               pip install -r requirements.txt &&
-               sudo systemctl restart fastapi'"
+              'set -ex &&
+              whoami &&
+              python3 --version &&
+              sudo apt update &&
+              sudo apt install -y python3.12-venv python3-pip &&
+              mkdir -p $APP_DIR &&
+              tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
+              mv /tmp/.env $APP_DIR/.env &&
+              cd $APP_DIR &&
+              rm -rf venv &&
+              python3 -m venv venv &&
+              source venv/bin/activate &&
+              pip install --upgrade pip &&
+              pip install -r requirements.txt &&
+              sudo systemctl restart fastapi'"
