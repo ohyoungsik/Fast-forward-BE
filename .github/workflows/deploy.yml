@@ -84,17 +84,18 @@ jobs:
             $BASTION_USER@$BASTION_HOST \
             "ssh -o StrictHostKeyChecking=no $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
               'set -e &&
-               sudo mkdir -p $APP_DIR &&
-               sudo tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
-               sudo mv /tmp/.env $APP_DIR/.env &&
-               cd $APP_DIR &&
-               sudo apt update &&
-               sudo apt install -y python3.12-venv python3-pip &&
-               sudo rm -rf venv &&
-               sudo python3 -m venv venv &&
-               sudo $APP_DIR/venv/bin/pip install --upgrade pip &&
-               sudo $APP_DIR/venv/bin/pip install -r requirements.txt &&
-               sudo chown -R www-data:www-data $APP_DIR &&
-               sudo systemctl daemon-reload &&
-               sudo systemctl restart $SERVICE_NAME &&
-               sudo systemctl status $SERVICE_NAME --no-pager'"
+              sudo mkdir -p /var/www/fastapi_app &&
+              sudo tar -xzf /tmp/backend.tar.gz -C /var/www/fastapi_app &&
+              sudo mv /tmp/.env /var/www/fastapi_app/.env &&
+              cd /var/www/fastapi_app &&
+              sudo apt update &&
+              sudo apt install -y python3.12-venv python3-pip &&
+              sudo rm -rf venv &&
+              sudo python3 -m venv venv &&
+              sudo /var/www/fastapi_app/venv/bin/pip install --upgrade pip &&
+              sudo /var/www/fastapi_app/venv/bin/pip install -r requirements.txt &&
+              sudo chown -R www-data:www-data /var/www/fastapi_app &&
+              sudo systemctl daemon-reload &&
+              sudo systemctl enable fastapi.service &&
+              sudo systemctl restart fastapi.service &&
+              sudo systemctl status fastapi.service --no-pager'"
