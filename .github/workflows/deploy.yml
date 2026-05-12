@@ -12,9 +12,10 @@ jobs:
     env:
       BASTION_HOST: ${{ secrets.BASTION_HOST }}
       BASTION_USER: ${{ secrets.BASTION_USER }}
+      BASTION_KEY: ${{ secrets.BASTION_KEY }}
       FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
-      FASTAPI_USER: ubuntu
-      APP_DIR: /home/ubuntu/backend
+      FASTAPI_USER: ${{ secrets.FASTAPI_USER }}
+      APP_DIR: /home/${{ secrets.FASTAPI_USER }}/backend
 
     steps:
       - name: Checkout source code
@@ -23,7 +24,7 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/bastion_key.pem
+          echo "$BASTION_KEY" > ~/.ssh/bastion_key.pem
           chmod 600 ~/.ssh/bastion_key.pem
 
       - name: Test SSH connection to Bastion
@@ -43,27 +44,39 @@ jobs:
             --exclude='.env' \
             -czf /tmp/backend.tar.gz .
 
-      - name: Upload backend to private server
+      - name: Upload backend to Bastion
         run: |
           scp -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
-            -o ProxyJump=$BASTION_USER@$BASTION_HOST \
             /tmp/backend.tar.gz \
-            $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/backend.tar.gz
+            $BASTION_USER@$BASTION_HOST:/tmp/backend.tar.gz
+
+      - name: Upload backend from Bastion to private server
+        run: |
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/bastion_key.pem
+
+          ssh -A -i ~/.ssh/bastion_key.pem \
+            -o StrictHostKeyChecking=no \
+            $BASTION_USER@$BASTION_HOST \
+            "scp -o StrictHostKeyChecking=no /tmp/backend.tar.gz $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/backend.tar.gz"
 
       - name: Deploy on private server
         run: |
-          ssh -i ~/.ssh/bastion_key.pem \
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/bastion_key.pem
+
+          ssh -A -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
-            -o ProxyJump=$BASTION_USER@$BASTION_HOST \
-            $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
-            "set -e &&
-             mkdir -p $APP_DIR &&
-             tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
-             cd $APP_DIR &&
-             cp .env.prod .env &&
-             python3 -m venv venv &&
-             source venv/bin/activate &&
-             pip install --upgrade pip &&
-             pip install -r requirements.txt &&
-             sudo systemctl restart fastapi"
+            $BASTION_USER@$BASTION_HOST \
+            "ssh -o StrictHostKeyChecking=no $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
+              'set -e &&
+               mkdir -p $APP_DIR &&
+               tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
+               cd $APP_DIR &&
+               cp .env.prod .env &&
+               python3 -m venv venv &&
+               source venv/bin/activate &&
+               pip install --upgrade pip &&
+               pip install -r requirements.txt &&
+               sudo systemctl restart fastapi'"
