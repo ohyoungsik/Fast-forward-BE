@@ -15,7 +15,9 @@ jobs:
       BASTION_KEY: ${{ secrets.BASTION_KEY }}
       FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
       FASTAPI_USER: ${{ secrets.FASTAPI_USER }}
-      APP_DIR: /home/${{ secrets.FASTAPI_USER }}/backend
+      ENV_PROD: ${{ secrets.ENV_PROD }}
+      APP_DIR: /var/www/fastapi_app
+      SERVICE_NAME: fastapi
 
     steps:
       - name: Checkout source code
@@ -27,29 +29,16 @@ jobs:
           echo "$BASTION_KEY" > ~/.ssh/bastion_key.pem
           chmod 600 ~/.ssh/bastion_key.pem
 
+      - name: Create env file
+        run: |
+          echo "$ENV_PROD" > /tmp/.env
+
       - name: Test SSH connection to Bastion
         run: |
           ssh -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
             $BASTION_USER@$BASTION_HOST \
             "echo 'Bastion connected successfully'"
-
-      # ENV_PROD Secret 에 .env.prod 파일 내용 전체를 붙여넣기 수정
-      # GitHub Secrets 등록: Settings → Secrets → New secret
-      #   Name  : ENV_PROD
-      #   Value : .env.prod 파일 내용 전체 (멀티라인 그대로 붙여넣기)
-      - name: Create .env file
-        env:
-          ENV_PROD: ${{ secrets.ENV_PROD }}
-        run: |
-          echo "$ENV_PROD" > /tmp/.env
-
-      - name: Upload .env to Bastion
-        run: |
-          scp -i ~/.ssh/bastion_key.pem \
-            -o StrictHostKeyChecking=no \
-            /tmp/.env \
-            $BASTION_USER@$BASTION_HOST:/tmp/.env
 
       - name: Package backend source
         run: |
@@ -61,14 +50,21 @@ jobs:
             --exclude='.env' \
             -czf /tmp/backend.tar.gz .
 
-      - name: Upload backend to Bastion
+      - name: Upload backend package to Bastion
         run: |
           scp -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
             /tmp/backend.tar.gz \
             $BASTION_USER@$BASTION_HOST:/tmp/backend.tar.gz
 
-      - name: Upload .env and backend to private server
+      - name: Upload env file to Bastion
+        run: |
+          scp -i ~/.ssh/bastion_key.pem \
+            -o StrictHostKeyChecking=no \
+            /tmp/.env \
+            $BASTION_USER@$BASTION_HOST:/tmp/.env
+
+      - name: Upload files from Bastion to FastAPI server
         run: |
           eval $(ssh-agent -s)
           ssh-add ~/.ssh/bastion_key.pem
@@ -76,10 +72,9 @@ jobs:
           ssh -A -i ~/.ssh/bastion_key.pem \
             -o StrictHostKeyChecking=no \
             $BASTION_USER@$BASTION_HOST \
-            "scp -o StrictHostKeyChecking=no /tmp/backend.tar.gz $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/backend.tar.gz &&
-             scp -o StrictHostKeyChecking=no /tmp/.env $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/.env"
+            "scp -o StrictHostKeyChecking=no /tmp/backend.tar.gz /tmp/.env $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/"
 
-      - name: Deploy on private server
+      - name: Deploy on FastAPI server
         run: |
           eval $(ssh-agent -s)
           ssh-add ~/.ssh/bastion_key.pem
@@ -88,18 +83,18 @@ jobs:
             -o StrictHostKeyChecking=no \
             $BASTION_USER@$BASTION_HOST \
             "ssh -o StrictHostKeyChecking=no $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
-              'set -ex &&
-              whoami &&
-              python3 --version &&
-              sudo apt update &&
-              sudo apt install -y python3.12-venv python3-pip &&
-              mkdir -p $APP_DIR &&
-              tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
-              mv /tmp/.env $APP_DIR/.env &&
-              cd $APP_DIR &&
-              rm -rf venv &&
-              python3 -m venv venv &&
-              source venv/bin/activate &&
-              pip install --upgrade pip &&
-              pip install -r requirements.txt &&
-              sudo systemctl restart fastapi'"
+              'set -e &&
+               sudo mkdir -p $APP_DIR &&
+               sudo tar -xzf /tmp/backend.tar.gz -C $APP_DIR &&
+               sudo mv /tmp/.env $APP_DIR/.env &&
+               cd $APP_DIR &&
+               sudo apt update &&
+               sudo apt install -y python3.12-venv python3-pip &&
+               sudo rm -rf venv &&
+               sudo python3 -m venv venv &&
+               sudo $APP_DIR/venv/bin/pip install --upgrade pip &&
+               sudo $APP_DIR/venv/bin/pip install -r requirements.txt &&
+               sudo chown -R www-data:www-data $APP_DIR &&
+               sudo systemctl daemon-reload &&
+               sudo systemctl restart $SERVICE_NAME &&
+               sudo systemctl status $SERVICE_NAME --no-pager'"
