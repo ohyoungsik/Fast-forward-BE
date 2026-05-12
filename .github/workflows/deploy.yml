@@ -29,19 +29,25 @@ jobs:
       BASTION_HOST: ${{ secrets.BASTION_HOST }}
       BASTION_USER: ${{ secrets.BASTION_USER }}
       FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
+      # FASTAPI_KEY : fastapi-be-server 의 PEM 키
+      #   - Bastion 과 같은 키 페어라면 BASTION_KEY 와 동일한 값으로 등록
+      #   - 다른 키 페어라면 해당 PEM 내용으로 등록
 
     steps:
       # 1) 현재 레포지토리 코드를 Actions Runner 에 체크아웃
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # 2) Secrets 에 저장된 PEM 키를 파일로 저장하고 권한 설정
+      # 2) Secrets 에 저장된 PEM 키들을 파일로 저장하고 권한 설정
+      #    bastion_key.pem : Bastion 접속용
+      #    fastapi_key.pem : fastapi-be-server 접속용 (ProxyCommand 로 각 홉마다 다른 키 사용)
       #    chmod 600 : SSH 는 키 파일 권한이 너무 열려 있으면 접속 거부함
-      - name: Setup SSH key
+      - name: Setup SSH keys
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/bastion_key.pem
-          chmod 600 ~/.ssh/bastion_key.pem
+          echo "${{ secrets.FASTAPI_KEY }}" > ~/.ssh/fastapi_key.pem
+          chmod 600 ~/.ssh/bastion_key.pem ~/.ssh/fastapi_key.pem
 
       # 3) Bastion 서버의 호스트 키를 known_hosts 에 등록
       #    등록하지 않으면 "Host key verification failed" 로 접속 실패
@@ -67,8 +73,8 @@ jobs:
       #      systemctl     : FastAPI 서비스 재시작 (systemd 등록 필요)
       - name: Deploy Backend to fastapi-be-server
         run: |
-          ssh -i ~/.ssh/bastion_key.pem \
-            -J $BASTION_USER@$BASTION_HOST \
+          ssh -i ~/.ssh/fastapi_key.pem \
+            -o "ProxyCommand=ssh -i ~/.ssh/bastion_key.pem -W %h:%p -o StrictHostKeyChecking=no $BASTION_USER@$BASTION_HOST" \
             -o StrictHostKeyChecking=no \
             ubuntu@$FASTAPI_PRIVATE_IP \
             'set -e &&
