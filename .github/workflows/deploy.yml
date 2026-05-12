@@ -1,6 +1,5 @@
-name: Deploy Backend
+name: Deploy Backend Test
 
-# main 브랜치에 push(merge) 될 때만 자동 실행
 on:
   push:
     branches:
@@ -10,74 +9,115 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    # ── GitHub Secrets 에 등록된 값을 환경변수로 주입 ─────────────────────────
-    # Repository → Settings → Secrets and variables → Actions 에서 등록
-    #
-    #   BASTION_HOST       : Bastion EC2 의 퍼블릭 IP (예: 3.38.253.68)
-    #                        Bastion = 점프 서버. Private Subnet 의 서버들은
-    #                        인터넷에서 직접 접근 불가하므로 이 서버를 경유함
-    #                        ※ 탄력적 IP 가 아니면 EC2 재시작 시 변경 → Secret 도 갱신 필요
-    #
-    #   BASTION_USER       : Bastion EC2 의 SSH 사용자명 (보통 ubuntu 또는 ec2-user)
-    #
-    #   BASTION_KEY        : EC2 접속용 PEM 키 파일의 내용 (-----BEGIN RSA PRIVATE KEY----- 포함)
-    #                        cat ~/your-key.pem 결과를 통째로 Secret 에 붙여넣기
-    #
-    #   FASTAPI_PRIVATE_IP : fastapi-be-server 의 Private IP (예: 172.16.20.20)
-    #                        Bastion 과 같은 VPC 내부이므로 Private IP 로 접근
     env:
       BASTION_HOST: ${{ secrets.BASTION_HOST }}
       BASTION_USER: ${{ secrets.BASTION_USER }}
       FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
-      # FASTAPI_KEY : fastapi-be-server 의 PEM 키
-      #   - Bastion 과 같은 키 페어라면 BASTION_KEY 와 동일한 값으로 등록
-      #   - 다른 키 페어라면 해당 PEM 내용으로 등록
 
     steps:
-      # 1) 현재 레포지토리 코드를 Actions Runner 에 체크아웃
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # 2) PEM 키 저장 + SSH config 생성
-      #    SSH config 에서 각 홉(Bastion, private 서버) 마다 설정을 명시해
-      #    ProxyJump 경유 시 host key 체크 문제를 방지한다
-      - name: Setup SSH key and config
+      - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/bastion_key.pem
           chmod 600 ~/.ssh/bastion_key.pem
 
-          cat > ~/.ssh/config << EOF
-          Host bastion
-            HostName $BASTION_HOST
-            User $BASTION_USER
-            IdentityFile ~/.ssh/bastion_key.pem
-            StrictHostKeyChecking no
-
-          Host fastapi-server
-            HostName $FASTAPI_PRIVATE_IP
-            User ubuntu
-            IdentityFile ~/.ssh/bastion_key.pem
-            ProxyJump bastion
-            StrictHostKeyChecking no
-          EOF
-          chmod 600 ~/.ssh/config
-
-      # 3) SSH config 의 fastapi-server 별칭으로 바로 접속해 배포
-      #    흐름: GitHub Actions ─(PEM)→ bastion ─(동일 PEM, ProxyJump)→ fastapi-be-server
-      #
-      #    배포 절차:
-      #      git pull      : main 브랜치 최신 코드로 업데이트
-      #      cp .env.prod  : 서버에 보관 중인 운영 환경변수 파일 적용
-      #      pip install   : 새로운 패키지 의존성 반영
-      #      systemctl     : FastAPI 서비스 재시작 (systemd 등록 필요)
-      - name: Deploy Backend to fastapi-be-server
+      - name: Test SSH to Bastion
         run: |
-          ssh fastapi-server \
-            'set -e &&
-             cd ~/backend &&
-             git pull origin main &&
-             cp .env.prod .env &&
-             source venv/bin/activate &&
-             pip install -r requirements.txt &&
-             sudo systemctl restart fastapi'
+          ssh -i ~/.ssh/bastion_key.pem \
+            -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            $BASTION_USER@$BASTION_HOST \
+            "hostname"
+
+      - name: Test SSH to FastAPI through Bastion
+        run: |
+          ssh -vvv \
+            -i ~/.ssh/bastion_key.pem \
+            -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            -J $BASTION_USER@$BASTION_HOST \
+            ubuntu@$FASTAPI_PRIVATE_IP \
+            "hostname"
+
+# name: Deploy Backend
+
+# # main 브랜치에 push(merge) 될 때만 자동 실행
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     # ── GitHub Secrets 에 등록된 값을 환경변수로 주입 ─────────────────────────
+#     # Repository → Settings → Secrets and variables → Actions 에서 등록
+#     #
+#     #   BASTION_HOST       : Bastion EC2 의 퍼블릭 IP (예: 3.38.253.68)
+#     #                        Bastion = 점프 서버. Private Subnet 의 서버들은
+#     #                        인터넷에서 직접 접근 불가하므로 이 서버를 경유함
+#     #                        ※ 탄력적 IP 가 아니면 EC2 재시작 시 변경 → Secret 도 갱신 필요
+#     #
+#     #   BASTION_USER       : Bastion EC2 의 SSH 사용자명 (보통 ubuntu 또는 ec2-user)
+#     #
+#     #   BASTION_KEY        : EC2 접속용 PEM 키 파일의 내용 (-----BEGIN RSA PRIVATE KEY----- 포함)
+#     #                        cat ~/your-key.pem 결과를 통째로 Secret 에 붙여넣기
+#     #
+#     #   FASTAPI_PRIVATE_IP : fastapi-be-server 의 Private IP (예: 172.16.20.20)
+#     #                        Bastion 과 같은 VPC 내부이므로 Private IP 로 접근
+#     env:
+#       BASTION_HOST: ${{ secrets.BASTION_HOST }}
+#       BASTION_USER: ${{ secrets.BASTION_USER }}
+#       FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
+
+#     steps:
+#       # 1) 현재 레포지토리 코드를 Actions Runner 에 체크아웃
+#       - name: Checkout source code
+#         uses: actions/checkout@v4
+
+#       # 2) PEM 키 저장
+#       #    chmod 600 : SSH 는 키 파일 권한이 너무 열려 있으면 접속 거부함
+#       - name: Setup SSH key
+#         run: |
+#           mkdir -p ~/.ssh
+#           echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/bastion_key.pem
+#           chmod 600 ~/.ssh/bastion_key.pem
+
+#       # 3) SSH Agent Forwarding(-A) 으로 Bastion 경유해 fastapi-be-server 에 배포
+#       #
+#       #    ProxyJump 실패 원인:
+#       #      Runner 의 PEM 키를 private 서버에 직접 제시 → private 서버가 해당 키를 모름
+#       #      (Bastion 에서 직접 ssh 할 때와 다른 키가 제시됨)
+#       #
+#       #    Agent Forwarding 방식:
+#       #      eval $(ssh-agent)  : Runner 에서 SSH 에이전트 시작
+#       #      ssh-add            : 에이전트에 PEM 키 등록
+#       #      ssh -A             : 에이전트를 Bastion 으로 포워딩
+#       #      Bastion 에서 private 서버 접속 시 → 에이전트를 통해 Runner 의 키로 인증
+#       #      = 로컬에서 Bastion 을 경유해 수동으로 ssh 하는 것과 동일한 흐름
+#       #
+#       #    배포 절차:
+#       #      git pull      : main 브랜치 최신 코드로 업데이트
+#       #      cp .env.prod  : 서버에 보관 중인 운영 환경변수 파일 적용
+#       #      pip install   : 새로운 패키지 의존성 반영
+#       #      systemctl     : FastAPI 서비스 재시작 (systemd 등록 필요)
+#       - name: Deploy Backend to fastapi-be-server
+#         run: |
+#           eval $(ssh-agent -s)
+#           ssh-add ~/.ssh/bastion_key.pem
+
+#           ssh -A -i ~/.ssh/bastion_key.pem \
+#             -o StrictHostKeyChecking=no \
+#             $BASTION_USER@$BASTION_HOST \
+#             "ssh -o StrictHostKeyChecking=no ubuntu@$FASTAPI_PRIVATE_IP \
+#               'set -e &&
+#                cd ~/backend &&
+#                git pull origin main &&
+#                cp .env.prod .env &&
+#                source venv/bin/activate &&
+#                pip install -r requirements.txt &&
+#                sudo systemctl restart fastapi'"
