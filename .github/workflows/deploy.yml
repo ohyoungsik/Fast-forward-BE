@@ -95,6 +95,7 @@ jobs:
               sudo /var/www/fastapi_app/venv/bin/pip install --upgrade pip &&
               sudo /var/www/fastapi_app/venv/bin/pip install -r requirements.txt &&
               sudo chown -R www-data:www-data /var/www/fastapi_app &&
+              sudo cp /var/www/fastapi_app/scripts/fastapi.service /etc/systemd/system/fastapi.service &&
               sudo systemctl daemon-reload &&
               sudo systemctl enable fastapi.service &&
               sudo systemctl restart fastapi.service &&
