@@ -165,27 +165,28 @@ jobs:
               [Install]
               WantedBy=multi-user.target
               EOF
-              
-              echo \"===== SYSTEMD RELOAD =====\"
 
+              echo \"===== SYSTEMD RELOAD =====\"
               sudo systemctl daemon-reload
 
               echo \"===== ENABLE FASTAPI =====\"
-
               sudo systemctl enable fastapi.service
 
               echo \"===== RESTART FASTAPI =====\"
-
               sudo systemctl restart fastapi.service
 
-              sleep 3
+              sleep 5
+
+              echo "===== CHECK FASTAPI ACTIVE ====="
+              sudo systemctl is-active --quiet fastapi.service  
+
+              echo "===== HEALTH CHECK ====="
+              curl -f http://127.0.0.1:8000/docs
 
               echo \"===== FASTAPI STATUS =====\"
-
               sudo systemctl status fastapi.service --no-pager || true
 
               echo \"===== FASTAPI LOG =====\"
-
               sudo journalctl -u fastapi.service \
                 -n 50 \
                 --no-pager
