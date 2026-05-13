@@ -171,31 +171,13 @@ jobs:
               sudo chmod 600 $APP_DIR/.env
 
               echo \"===== CREATE FASTAPI SERVICE =====\"
-              # systemd 서비스 파일 생성: 서버 재부팅 시에도 자동 실행되도록 등록
-              sudo tee /etc/systemd/system/fastapi.service > /dev/null <<SERVICE
-              [Unit]
-              Description=FastAPI Backend Service
-              After=network.target
+              # gunicorn access/error 로그 저장 디렉토리 생성
+              sudo mkdir -p /var/log/fastapi
+              sudo chown www-data:www-data /var/log/fastapi
 
-              [Service]
-              User=www-data
-              Group=www-data
-              WorkingDirectory=$APP_DIR
-              EnvironmentFile=$APP_DIR/.env
-              Environment=\"PATH=$APP_DIR/venv/bin\"
-
-              ExecStart=$APP_DIR/venv/bin/gunicorn \\
-                  -w 1 \\
-                  -k uvicorn.workers.UvicornWorker \\
-                  -b 0.0.0.0:8000 \\
-                  app.main:app
-
-              Restart=always
-              RestartSec=5
-
-              [Install]
-              WantedBy=multi-user.target
-              SERVICE
+              # 레포에 포함된 서비스 파일을 systemd 경로로 복사
+              # (heredoc 방식은 YAML 들여쓰기로 인해 종료 마커가 인식되지 않는 문제가 있어 분리)
+              sudo cp $APP_DIR/deploy/fastapi.service /etc/systemd/system/fastapi.service
 
               echo \"===== SYSTEMD RELOAD =====\"
               sudo systemctl daemon-reload
@@ -224,6 +206,12 @@ jobs:
 
               echo \"===== FASTAPI LOG =====\"
               sudo journalctl -u fastapi.service -n 100 --no-pager
+
+              echo \"===== GUNICORN ACCESS LOG =====\"
+              sudo tail -n 50 /var/log/fastapi/access.log 2>/dev/null || echo 'No access log yet'
+
+              echo \"===== GUNICORN ERROR LOG =====\"
+              sudo tail -n 50 /var/log/fastapi/error.log 2>/dev/null || echo 'No error log yet'
 
               echo \"===== DEPLOY END =====\"
               '"
