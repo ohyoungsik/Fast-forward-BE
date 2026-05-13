@@ -10,43 +10,42 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    # ── 환경변수 ──────────────────────────────────────────────────────────────
+    # ── 환경변수 ─────────────────────────────────────────────────────────────
     # Bastion(점프 서버) 접속 정보
-    # Private 네트워크에 위치한 FastAPI 서버는 Bastion을 경유해서만 접근 가능
+    # Private 네트워크의 FastAPI 서버는 Bastion을 경유해야만 접근 가능
     env:
       BASTION_HOST: ${{ secrets.BASTION_HOST }}
       BASTION_USER: ${{ secrets.BASTION_USER }}
       BASTION_KEY:  ${{ secrets.BASTION_KEY }}
 
-      FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}
+      FASTAPI_PRIVATE_IP: ${{ secrets.FASTAPI_PRIVATE_IP }}  # 172.16.20.20
       FASTAPI_USER:       ${{ secrets.FASTAPI_USER }}
 
-      ENV_PROD: ${{ secrets.ENV_PROD }}   # 운영 환경변수 전체 (.env 내용)
-
-      APP_DIR: /var/www/fastapi_app       # FastAPI 서버의 앱 배포 경로
+      ENV_PROD: ${{ secrets.ENV_PROD }}        # 운영 환경변수 전체 (.env 내용)
+      APP_DIR: /var/www/fastapi_app            # FastAPI 서버의 앱 배포 경로
 
     steps:
 
-      # ── Step 1. 소스 코드 체크아웃 ──────────────────────────────────────────
+      # ── Step 1. 소스 코드 체크아웃 ─────────────────────────────────────────
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # ── Step 2. SSH 키 파일 설정 ─────────────────────────────────────────────
-      # GitHub Secret에 저장된 PEM 키를 Runner의 ~/.ssh 에 저장
+      # ── Step 2. SSH 키 파일 설정 ────────────────────────────────────────────
+      # GitHub Secret의 PEM 키를 Runner ~/.ssh 에 저장
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "$BASTION_KEY" > ~/.ssh/bastion_key.pem
           chmod 600 ~/.ssh/bastion_key.pem
 
-      # ── Step 3. 운영 환경변수 파일 생성 ─────────────────────────────────────
-      # Secret에 저장된 ENV_PROD 내용을 /tmp/.env 로 저장 (서버 전송용)
+      # ── Step 3. 운영 환경변수 파일 생성 ────────────────────────────────────
+      # Secret의 ENV_PROD 내용을 /tmp/.env 로 저장 (서버 전송용)
       - name: Create env file
         run: |
           echo "$ENV_PROD" > /tmp/.env
 
-      # ── Step 4. Bastion 서버 SSH 연결 확인 ──────────────────────────────────
-      # 이후 단계 실패를 방지하기 위해 Bastion 접속 가능 여부를 먼저 검증
+      # ── Step 4. Bastion 서버 SSH 연결 확인 ─────────────────────────────────
+      # 이후 단계 실패 방지를 위해 Bastion 접속 가능 여부를 먼저 검증
       - name: Test SSH connection to Bastion
         run: |
           ssh -i ~/.ssh/bastion_key.pem \
@@ -56,7 +55,8 @@ jobs:
             "echo 'Bastion connected successfully'"
 
       # ── Step 5. 백엔드 소스 압축 ────────────────────────────────────────────
-      # 불필요한 파일(.git, venv, __pycache__ 등)을 제외하고 tar.gz 로 패키징
+      # venv는 서버에서 직접 생성해야 하므로 반드시 제외
+      # (runner에서 만든 venv를 복사하면 shebang 경로가 깨져 203/EXEC 오류 발생)
       - name: Package backend source
         run: |
           tar \
@@ -67,7 +67,7 @@ jobs:
             --exclude='.env' \
             -czf /tmp/backend.tar.gz .
 
-      # ── Step 6. Bastion 서버로 소스 업로드 ──────────────────────────────────
+      # ── Step 6. Bastion 서버로 소스 업로드 ─────────────────────────────────
       - name: Upload backend package to Bastion
         run: |
           scp -i ~/.ssh/bastion_key.pem \
@@ -76,7 +76,7 @@ jobs:
             /tmp/backend.tar.gz \
             $BASTION_USER@$BASTION_HOST:/tmp/backend.tar.gz
 
-      # ── Step 7. Bastion 서버로 환경변수 파일 업로드 ───────--───────────────────
+      # ── Step 7. Bastion 서버로 환경변수 파일 업로드 ─────────────────────────
       - name: Upload env file to Bastion
         run: |
           scp -i ~/.ssh/bastion_key.pem \
@@ -85,8 +85,8 @@ jobs:
             /tmp/.env \
             $BASTION_USER@$BASTION_HOST:/tmp/.env
 
-      # ── Step 8. Bastion → Private FastAPI 서버로 파일 전달 ──────────────────
-      # SSH Agent Forwarding(-A)을 사용해 Bastion에서 Private 서버로 SCP 전송
+      # ── Step 8. Bastion → Private FastAPI 서버로 파일 전달 ─────────────────
+      # SSH Agent Forwarding(-A)으로 Bastion에서 Private 서버로 SCP 전송
       - name: Upload files from Bastion to FastAPI server
         run: |
           eval $(ssh-agent -s)
@@ -103,7 +103,8 @@ jobs:
               $FASTAPI_USER@$FASTAPI_PRIVATE_IP:/tmp/"
 
       # ── Step 9. FastAPI 서버 배포 ────────────────────────────────────────────
-      # Bastion을 경유해 Private FastAPI 서버에 접속 후 전체 배포 절차 실행
+      # bash -s <<'EOF' 방식: 스크립트를 stdin으로 전달
+      # → 기존 이중 SSH + 단따옴표 중첩 방식의 따옴표 이스케이프 문제 해결
       - name: Deploy on FastAPI server
         run: |
           eval $(ssh-agent -s)
@@ -116,122 +117,152 @@ jobs:
             "ssh \
               -o StrictHostKeyChecking=no \
               $FASTAPI_USER@$FASTAPI_PRIVATE_IP \
-              '
-              set -e
+              'bash -s' <<'EOF'
+          set -e
 
-              echo \"===== DEPLOY START =====\"
+          APP_DIR="/var/www/fastapi_app"
 
-              # 앱 디렉토리 생성 (없을 경우)
-              sudo mkdir -p $APP_DIR
+          echo "===== DEPLOY START ====="
+          hostname
+          whoami
 
-              echo \"===== EXTRACT FILES =====\"
-              sudo tar -xzf /tmp/backend.tar.gz -C $APP_DIR
+          echo "===== CREATE APP DIR ====="
+          sudo mkdir -p "$APP_DIR"
 
-              echo \"===== MOVE ENV =====\"
-              sudo mv /tmp/.env $APP_DIR/.env
+          echo "===== EXTRACT FILES ====="
+          sudo tar -xzf /tmp/backend.tar.gz -C "$APP_DIR"
 
-              echo \"===== CHECK ENV FILE =====\"
-              if [ ! -f \"$APP_DIR/.env\" ]; then
-                echo \"ERROR: $APP_DIR/.env file does not exist\"
-                exit 1
-              fi
+          echo "===== MOVE ENV ====="
+          sudo mv /tmp/.env "$APP_DIR/.env"
 
-              # 주요 환경변수 값 확인 (배포 로그에서 설정 검증용)
-              sudo grep -E \"PROMETHEUS_URL|PROMETHEUS_SERVER_IP|DB_HOST|DB_NAME|COLLECT_INTERVAL\" $APP_DIR/.env
+          # .env 파일 존재 여부 확인
+          echo "===== CHECK ENV FILE ====="
+          if [ ! -f "$APP_DIR/.env" ]; then
+            echo "ERROR: $APP_DIR/.env file does not exist"
+            exit 1
+          fi
 
-              echo \"===== INSTALL SYSTEM PACKAGE =====\"
-              sudo apt update
-              sudo apt install -y \
-                python3-venv \
-                python3-pip \
-                python3.12-venv \
-                postgresql-client
+          # 주요 환경변수 값 출력 (배포 로그에서 설정 검증용)
+          sudo grep -E "PROMETHEUS_URL|PROMETHEUS_SERVER_IP|DB_HOST|DB_NAME|COLLECT_INTERVAL|DB_URL" "$APP_DIR/.env" || true
 
-              echo \"===== INSTALL PYTHON DEPENDENCIES =====\"
-              # venv는 서버에서 직접 생성 (GitHub Actions runner에서 만든 venv를 복사하면 shebang 경로가 깨짐)
-              # tar --exclude='venv' 로 소스만 전송하고, 여기서 서버 경로 기준으로 새로 만듦
-              cd $APP_DIR
-              if [ ! -d \"venv\" ]; then
-                python3 -m venv venv
-              fi
+          echo "===== INSTALL SYSTEM PACKAGE ====="
+          sudo apt update
+          sudo apt install -y \
+            python3-venv \
+            python3-pip \
+            python3.12-venv \
+            postgresql-client
 
-              sudo chown -R www-data:www-data $APP_DIR
-              sudo chmod 600 $APP_DIR/.env
+          # ── venv 생성 및 패키지 설치 ──────────────────────────────────────
+          # venv가 없을 때만 새로 생성 (재배포 시 불필요한 생성 방지)
+          # www-data 유저로 설치해야 shebang 경로가 서버 경로로 올바르게 설정됨
+          # root로 설치하면 shebang이 /root/... 가 되어 www-data가 실행 불가
+          echo "===== INSTALL PYTHON DEPENDENCIES ====="
+          cd "$APP_DIR"
 
-              sudo -u www-data $APP_DIR/venv/bin/python -m pip install --upgrade pip
-              sudo -u www-data $APP_DIR/venv/bin/pip install -r $APP_DIR/requirements.txt
+          if [ ! -d "venv" ]; then
+            sudo python3 -m venv venv
+          fi
 
-              echo \"===== DB INIT =====\"
-              # .env에서 DB_URL을 읽어 init.sql 실행 (테이블이 없을 경우에만 적용됨)
-              DB_URL=\$(grep \"^DB_URL=\" $APP_DIR/.env | cut -d= -f2-)
-              if [ -n \"\$DB_URL\" ] && [ -f \"$APP_DIR/init.sql\" ]; then
-                psql \"\$DB_URL\" -f $APP_DIR/init.sql
-              else
-                echo \"DB_URL or init.sql not found. Skip DB INIT.\"
-              fi
+          sudo chown -R www-data:www-data "$APP_DIR"
+          sudo chmod 600 "$APP_DIR/.env"
 
-              echo \"===== CREATE FASTAPI SERVICE =====\"
-              # gunicorn access/error 로그 저장 디렉토리 생성
-              sudo mkdir -p /var/log/fastapi
-              sudo chown www-data:www-data /var/log/fastapi
+          sudo -u www-data "$APP_DIR/venv/bin/python" -m pip install --upgrade pip
 
-              # 레포에 포함된 서비스 파일을 systemd 경로로 복사 후 CRLF 제거
-              sudo cp $APP_DIR/deploy/fastapi.service /etc/systemd/system/fastapi.service
-              sudo sed -i 's/\r//' /etc/systemd/system/fastapi.service
+          if [ -f "$APP_DIR/requirements.txt" ]; then
+            sudo -u www-data "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+          else
+            echo "ERROR: requirements.txt not found"
+            exit 1
+          fi
 
-              echo \"===== SYSTEMD RELOAD =====\"
-              sudo systemctl daemon-reload
+          # requirements.txt에 포함되어 있지만 명시적으로 재확인
+          sudo -u www-data "$APP_DIR/venv/bin/pip" install gunicorn uvicorn
 
-              echo \"===== ENABLE FASTAPI =====\"
-              sudo systemctl enable fastapi.service
+          # gunicorn shebang 경로 확인
+          # 정상: #!/var/www/fastapi_app/venv/bin/python3
+          # 비정상: #!/home/runner/... (runner 경로면 서버에서 실행 불가)
+          echo "===== CHECK GUNICORN ====="
+          ls -al "$APP_DIR/venv/bin/gunicorn"
+          head -1 "$APP_DIR/venv/bin/gunicorn"
 
-              echo \"===== RESTART FASTAPI =====\"
-              sudo systemctl restart fastapi.service
+          echo "===== DB INIT ====="
+          DB_URL=$(grep "^DB_URL=" "$APP_DIR/.env" | cut -d= -f2- || true)
 
-              sleep 5
+          if [ -n "$DB_URL" ] && [ -f "$APP_DIR/init.sql" ]; then
+            psql "$DB_URL" -f "$APP_DIR/init.sql"
+          else
+            echo "DB_URL or init.sql not found. Skip DB INIT."
+          fi
 
-              echo \"===== CHECK FASTAPI ACTIVE =====\"
-              sudo systemctl is-active --quiet fastapi.service
+          echo "===== CREATE FASTAPI LOG DIR ====="
+          sudo mkdir -p /var/log/fastapi
+          sudo chown www-data:www-data /var/log/fastapi
 
-              # ── 로그 및 상태 확인 (set -e에 의한 조기 종료 방지를 위해 || true 적용) ──
+          # ── systemd 서비스 파일 생성 ──────────────────────────────────────
+          # 주의: <<SERVICE 종료 마커가 들여쓰기 되어 있어 bash가 인식 못 할 수 있음
+          # → 현재 bash -s 방식이므로 동작 여부 확인 필요
+          echo "===== CREATE FASTAPI SERVICE ====="
+          sudo tee /etc/systemd/system/fastapi.service > /dev/null <<SERVICE
+          [Unit]
+          Description=FastAPI Backend Service
+          After=network.target
 
-              echo \"===== PROCESS CHECK =====\"
-              ps -ef | grep gunicorn | grep -v grep || true
+          [Service]
+          User=www-data
+          Group=www-data
+          WorkingDirectory=/var/www/fastapi_app
+          EnvironmentFile=/var/www/fastapi_app/.env
+          Environment="PATH=/var/www/fastapi_app/venv/bin"
+          ExecStart=/var/www/fastapi_app/venv/bin/gunicorn \\
+              -w 2 \\
+              -k uvicorn.workers.UvicornWorker \\
+              -b 0.0.0.0:8000 \\
+              --access-logfile /var/log/fastapi/access.log \\
+              --error-logfile /var/log/fastapi/error.log \\
+              --log-level info \\
+              main:app
+          Restart=always
+          RestartSec=5
 
-              echo \"===== FASTAPI STATUS =====\"
-              sudo systemctl status fastapi.service --no-pager || true
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE
 
-              echo \"===== FASTAPI LOG =====\"
-              sudo journalctl -u fastapi.service -n 100 --no-pager || true
+          echo "===== SYSTEMD RELOAD ====="
+          sudo systemctl daemon-reload
 
-              echo \"===== GUNICORN ERROR LOG =====\"
-              sudo tail -n 100 /var/log/fastapi/error.log 2>/dev/null || echo 'No error log yet'
+          echo "===== ENABLE FASTAPI ====="
+          sudo systemctl enable fastapi.service
 
-              echo \"===== GUNICORN ACCESS LOG =====\"
-              sudo tail -n 50 /var/log/fastapi/access.log 2>/dev/null || echo 'No access log yet'
+          echo "===== RESTART FASTAPI ====="
+          sudo systemctl restart fastapi.service
 
-              echo \"===== HEALTH CHECK =====\"
+          sleep 5
 
-              echo \"현재 서버:\"
-              hostname
-              pwd
+          # ── 배포 후 상태 확인 (|| true 로 set -e 조기 종료 방지) ───────────
+          echo "===== FASTAPI STATUS ====="
+          sudo systemctl status fastapi.service --no-pager || true
 
-              echo \"8000 포트 확인:\"
-              sudo ss -lntp | grep 8000 || true
+          echo "===== FASTAPI JOURNAL LOG ====="
+          sudo journalctl -u fastapi.service -n 100 --no-pager || true
 
-              echo \"FastAPI 상태:\"
-              sudo systemctl status fastapi --no-pager || true
+          echo "===== GUNICORN ERROR LOG ====="
+          sudo tail -n 100 /var/log/fastapi/error.log 2>/dev/null || echo "No error log yet"
 
-              echo \"gunicorn 실행 파일 확인:\"
-              ls -al $APP_DIR/venv/bin/gunicorn || true
-              head -1 $APP_DIR/venv/bin/gunicorn || true
+          echo "===== PROCESS CHECK ====="
+          ps -ef | grep gunicorn | grep -v grep || true
 
-              echo \"Health check (verbose):\"
-              curl -v http://127.0.0.1:8000/api/v1/health || true
+          echo "===== PORT CHECK ====="
+          sudo ss -lntp | grep 8000 || true
 
-              curl -f http://127.0.0.1:8000/api/v1/health \
-                && echo 'HEALTH CHECK PASSED' \
-                || { echo 'HEALTH CHECK FAILED'; sudo journalctl -u fastapi -n 100 --no-pager; exit 1; }
+          # curl -v 로 응답 상세 확인 후, -f 로 실제 성공/실패 판정
+          echo "===== HEALTH CHECK ====="
+          curl -v http://127.0.0.1:8000/api/v1/health || true
 
-              echo \"===== DEPLOY END =====\"
-              '"
+          curl -f http://127.0.0.1:8000/api/v1/health \
+            && echo "HEALTH CHECK PASSED" \
+            || { echo "HEALTH CHECK FAILED"; sudo journalctl -u fastapi.service -n 150 --no-pager; exit 1; }
+
+          echo "===== DEPLOY END ====="
+          EOF"
