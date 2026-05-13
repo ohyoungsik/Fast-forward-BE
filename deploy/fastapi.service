@@ -8,8 +8,14 @@ Group=www-data
 WorkingDirectory=/var/www/fastapi_app
 EnvironmentFile=/var/www/fastapi_app/.env
 Environment="PATH=/var/www/fastapi_app/venv/bin"
-
-ExecStart=/var/www/fastapi_app/venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 --access-logfile /var/log/fastapi/access.log --error-logfile /var/log/fastapi/error.log --log-level info app.main:app
+ExecStart=/var/www/fastapi_app/venv/bin/gunicorn \
+    -w 1 \
+    -k uvicorn.workers.UvicornWorker \
+    -b 0.0.0.0:8000 \
+    --access-logfile /var/log/fastapi/access.log \
+    --error-logfile /var/log/fastapi/error.log \
+    --log-level info \
+    app.main:app
 
 Restart=always
 RestartSec=5
