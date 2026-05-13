@@ -67,6 +67,22 @@ CREATE TABLE IF NOT EXISTS server_info (
 );
 
 -- =========================================
+-- 4-1. 서버 기본 정보 초기 데이터 (public_ip은 생성될때 변경해줘야함)
+-- =========================================
+
+INSERT INTO public.server_info
+(server_name, server_role, private_ip, public_ip, created_at)
+VALUES
+('public-bastion', 'bastion', '172.16.10.50', '43.201.250.192', NOW()),
+('nginx-fe-server', 'frontend', '172.16.20.10', NULL, NOW()),
+('fastapi-be-server', 'backend', '172.16.20.20', NULL, NOW()),
+('postgre-db-server', 'database', '172.16.20.30', NULL, NOW())
+ON CONFLICT (server_name) DO UPDATE SET
+    server_role = EXCLUDED.server_role,
+    private_ip = EXCLUDED.private_ip,
+    public_ip = EXCLUDED.public_ip;
+
+-- =========================================
 -- 5. 서버 메트릭 통합 테이블
 -- =========================================
 
@@ -101,8 +117,6 @@ ON server_metrics (
     metric_type,
     collected_at DESC
 );
-
-CREATE INDEX ON server_metrics (server_id, metric_type, collected_at DESC);
 
 -- =========================================
 -- 6. Web Application 로그 통합 테이블
