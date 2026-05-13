@@ -214,8 +214,24 @@ jobs:
               ss -tlnp | grep 8000 || echo 'WARNING: Port 8000 NOT listening'
 
               echo \"===== HEALTH CHECK =====\"
-              # 로그를 모두 출력한 뒤 헬스체크 — 실패 시 배포 전체를 실패로 처리
-              curl -sf http://127.0.0.1:8000/api/v1/health \
+
+              echo \"현재 서버:\"
+              hostname
+              pwd
+
+              echo \"8000 포트 확인:\"
+              sudo ss -lntp | grep 8000 || true
+
+              echo \"FastAPI 상태:\"
+              sudo systemctl status fastapi --no-pager || true
+
+              echo \"FastAPI 최근 로그:\"
+              sudo journalctl -u fastapi -n 80 --no-pager || true
+
+              echo \"Health check:\"
+              curl -v http://127.0.0.1:8000/api/v1/health
+
+              curl -f http://127.0.0.1:8000/api/v1/health \
                 && echo 'HEALTH CHECK PASSED' \
                 || { echo 'HEALTH CHECK FAILED'; exit 1; }
 
