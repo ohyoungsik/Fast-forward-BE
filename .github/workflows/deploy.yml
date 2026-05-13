@@ -76,7 +76,7 @@ jobs:
             /tmp/backend.tar.gz \
             $BASTION_USER@$BASTION_HOST:/tmp/backend.tar.gz
 
-      # ── Step 7. Bastion 서버로 환경변수 파일 업로드 ──────────────────────────
+      # ── Step 7. Bastion 서버로 환경변수 파일 업로드 ───────--───────────────────
       - name: Upload env file to Bastion
         run: |
           scp -i ~/.ssh/bastion_key.pem \
