@@ -139,7 +139,7 @@ jobs:
               # 주요 환경변수 값 확인 (배포 로그에서 설정 검증용)
               sudo grep -E \"PROMETHEUS_URL|PROMETHEUS_SERVER_IP|DB_HOST|DB_NAME|COLLECT_INTERVAL\" $APP_DIR/.env
 
-              echo \"===== INSTALL PACKAGE =====\"
+              echo \"===== INSTALL SYSTEM PACKAGE =====\"
               sudo apt update
               sudo apt install -y \
                 python3-venv \
@@ -147,14 +147,19 @@ jobs:
                 python3.12-venv \
                 postgresql-client
 
-              echo \"===== CREATE VENV =====\"
+              echo \"===== INSTALL PYTHON DEPENDENCIES =====\"
+              # venv는 서버에서 직접 생성 (GitHub Actions runner에서 만든 venv를 복사하면 shebang 경로가 깨짐)
+              # tar --exclude='venv' 로 소스만 전송하고, 여기서 서버 경로 기준으로 새로 만듦
               cd $APP_DIR
-              sudo rm -rf venv
-              sudo python3 -m venv venv
+              if [ ! -d \"venv\" ]; then
+                python3 -m venv venv
+              fi
 
-              echo \"===== INSTALL REQUIREMENTS =====\"
-              sudo $APP_DIR/venv/bin/pip install --upgrade pip
-              sudo $APP_DIR/venv/bin/pip install -r requirements.txt
+              sudo chown -R www-data:www-data $APP_DIR
+              sudo chmod 600 $APP_DIR/.env
+
+              sudo -u www-data $APP_DIR/venv/bin/python -m pip install --upgrade pip
+              sudo -u www-data $APP_DIR/venv/bin/pip install -r $APP_DIR/requirements.txt
 
               echo \"===== DB INIT =====\"
               # .env에서 DB_URL을 읽어 init.sql 실행 (테이블이 없을 경우에만 적용됨)
@@ -165,19 +170,14 @@ jobs:
                 echo \"DB_URL or init.sql not found. Skip DB INIT.\"
               fi
 
-              echo \"===== CHANGE OWNER =====\"
-              # www-data(gunicorn 실행 유저)가 앱 디렉토리를 읽을 수 있도록 소유권 변경
-              sudo chown -R www-data:www-data $APP_DIR
-              sudo chmod 600 $APP_DIR/.env
-
               echo \"===== CREATE FASTAPI SERVICE =====\"
               # gunicorn access/error 로그 저장 디렉토리 생성
               sudo mkdir -p /var/log/fastapi
               sudo chown www-data:www-data /var/log/fastapi
 
-              # 레포에 포함된 서비스 파일을 systemd 경로로 복사
-              # (heredoc 방식은 YAML 들여쓰기로 인해 종료 마커가 인식되지 않는 문제가 있어 분리)
+              # 레포에 포함된 서비스 파일을 systemd 경로로 복사 후 CRLF 제거
               sudo cp $APP_DIR/deploy/fastapi.service /etc/systemd/system/fastapi.service
+              sudo sed -i 's/\r//' /etc/systemd/system/fastapi.service
 
               echo \"===== SYSTEMD RELOAD =====\"
               sudo systemctl daemon-reload
@@ -210,9 +210,6 @@ jobs:
               echo \"===== GUNICORN ACCESS LOG =====\"
               sudo tail -n 50 /var/log/fastapi/access.log 2>/dev/null || echo 'No access log yet'
 
-              echo \"===== PORT CHECK =====\"
-              ss -tlnp | grep 8000 || echo 'WARNING: Port 8000 NOT listening'
-
               echo \"===== HEALTH CHECK =====\"
 
               echo \"현재 서버:\"
@@ -225,15 +222,16 @@ jobs:
               echo \"FastAPI 상태:\"
               sudo systemctl status fastapi --no-pager || true
 
-              echo \"FastAPI 최근 로그:\"
-              sudo journalctl -u fastapi -n 80 --no-pager || true
+              echo \"gunicorn 실행 파일 확인:\"
+              ls -al $APP_DIR/venv/bin/gunicorn || true
+              head -1 $APP_DIR/venv/bin/gunicorn || true
 
-              echo \"Health check:\"
-              curl -v http://127.0.0.1:8000/api/v1/health
+              echo \"Health check (verbose):\"
+              curl -v http://127.0.0.1:8000/api/v1/health || true
 
               curl -f http://127.0.0.1:8000/api/v1/health \
                 && echo 'HEALTH CHECK PASSED' \
-                || { echo 'HEALTH CHECK FAILED'; exit 1; }
+                || { echo 'HEALTH CHECK FAILED'; sudo journalctl -u fastapi -n 100 --no-pager; exit 1; }
 
               echo \"===== DEPLOY END =====\"
               '"
