@@ -193,25 +193,31 @@ jobs:
               echo \"===== CHECK FASTAPI ACTIVE =====\"
               sudo systemctl is-active --quiet fastapi.service
 
-              echo \"===== HEALTH CHECK =====\"
-              # /docs 엔드포인트로 서비스 정상 응답 여부 확인
-              curl -f http://127.0.0.1:8000/docs
+              # ── 로그 및 상태 확인 (set -e에 의한 조기 종료 방지를 위해 || true 적용) ──
 
               echo \"===== PROCESS CHECK =====\"
-              # gunicorn 프로세스가 실제로 떠 있는지 확인
               ps -ef | grep gunicorn | grep -v grep || true
 
               echo \"===== FASTAPI STATUS =====\"
               sudo systemctl status fastapi.service --no-pager || true
 
               echo \"===== FASTAPI LOG =====\"
-              sudo journalctl -u fastapi.service -n 100 --no-pager
+              sudo journalctl -u fastapi.service -n 100 --no-pager || true
+
+              echo \"===== GUNICORN ERROR LOG =====\"
+              sudo tail -n 100 /var/log/fastapi/error.log 2>/dev/null || echo 'No error log yet'
 
               echo \"===== GUNICORN ACCESS LOG =====\"
               sudo tail -n 50 /var/log/fastapi/access.log 2>/dev/null || echo 'No access log yet'
 
-              echo \"===== GUNICORN ERROR LOG =====\"
-              sudo tail -n 50 /var/log/fastapi/error.log 2>/dev/null || echo 'No error log yet'
+              echo \"===== PORT CHECK =====\"
+              ss -tlnp | grep 8000 || echo 'WARNING: Port 8000 NOT listening'
+
+              echo \"===== HEALTH CHECK =====\"
+              # 로그를 모두 출력한 뒤 헬스체크 — 실패 시 배포 전체를 실패로 처리
+              curl -sf http://127.0.0.1:8000/api/v1/health \
+                && echo 'HEALTH CHECK PASSED' \
+                || { echo 'HEALTH CHECK FAILED'; exit 1; }
 
               echo \"===== DEPLOY END =====\"
               '"
