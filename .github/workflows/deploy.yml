@@ -126,7 +126,13 @@ jobs:
               sudo apt install -y \
                 python3-venv \
                 python3-pip \
-                python3.12-venv
+                python3.12-venv \
+                postgresql-client
+
+              echo \"===== DB INIT =====\"
+
+              DB_URL=\$(grep '^DB_URL=' $APP_DIR/.env | cut -d= -f2-)
+              psql \"\$DB_URL\" -f $APP_DIR/init.sql
 
               echo \"===== CREATE VENV =====\"
 
