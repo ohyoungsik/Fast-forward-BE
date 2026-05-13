@@ -146,6 +146,26 @@ jobs:
 
               sudo chown -R www-data:www-data $APP_DIR
 
+              echo "===== CREATE FASTAPI SERVICE ====="
+
+              sudo tee /etc/systemd/system/fastapi.service > /dev/null <<EOF
+              [Unit]
+              Description=FastAPI Backend Service
+              After=network.target
+
+              [Service]
+              User=www-data
+              Group=www-data
+              WorkingDirectory=$APP_DIR
+              EnvironmentFile=$APP_DIR/.env
+              ExecStart=$APP_DIR/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+              Restart=always
+              RestartSec=5
+
+              [Install]
+              WantedBy=multi-user.target
+              EOF
+              
               echo \"===== SYSTEMD RELOAD =====\"
 
               sudo systemctl daemon-reload
