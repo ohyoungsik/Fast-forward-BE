@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.app_log import AppLog
 
-# 웹로그
+# 웹로그 m
 def get_webapp_logs(
     db: Session,
     log_type: str | None,
