@@ -31,11 +31,11 @@ METRICS: dict = {
         "unit": "%",
     },
     "network_rx": { # 서버가 초당 얼마나 데이터를 받고 있는가
-        "query": f'sum by (instance) (rate(node_network_receive_bytes_total{{device="{NETWORK_DEVICE}"}}[1m]))',
+        "query": 'sum by (instance) (rate(node_network_receive_bytes_total{device!="lo"}[1m]))',
         "unit": "bytes/s",
     },
     "network_tx": { # 서버가 초당 얼마나 데이터를 보내고 있는가
-        "query": f'sum by (instance) (rate(node_network_transmit_bytes_total{{device="{NETWORK_DEVICE}"}}[1m]))',
+        "query": 'sum by (instance) (rate(node_network_transmit_bytes_total{device!="lo"}[1m]))',
         "unit": "bytes/s",
     },
 }
