@@ -146,3 +146,60 @@ CREATE TABLE IF NOT EXISTS app_logs (
 
 CREATE INDEX IF NOT EXISTS idx_app_logs_collected_at ON app_logs (collected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_app_logs_server_type  ON app_logs (server_name, log_type);
+
+
+-- =========================================
+-- 7. 접근 보안 로그 테이블
+-- Linux SSH / sudo / session 인증 로그 저장
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS security_access_logs (
+    id BIGSERIAL PRIMARY KEY,
+
+    -- public-bastion, nginx-fe-server, fastapi-be-server, postgre-db-server 등
+    server_name VARCHAR(50),
+
+    -- bastion / frontend / backend / database
+    server_role VARCHAR(50),
+
+    -- auth_log / ssh_auth / sudo / session
+    log_type VARCHAR(30) NOT NULL,
+
+    -- INFO / WARN / ERROR
+    level VARCHAR(10) NOT NULL,
+
+    -- 접속 또는 인증을 시도한 계정
+    user_id VARCHAR(100),
+
+    -- 접근 출발지 IP
+    source_ip VARCHAR(50),
+
+    -- ssh / sudo / session
+    auth_method VARCHAR(30),
+
+    -- success / failed / disconnected / session_opened / session_closed / sudo
+    status VARCHAR(50),
+
+    -- 실제 로그 파일 경로
+    source_path TEXT,
+
+    -- 화면 표시용 메시지
+    message TEXT,
+
+    -- 원본 로그 JSON 보관
+    parsed_data JSONB,
+
+    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_collected_at
+ON security_access_logs (collected_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_server
+ON security_access_logs (server_name, server_role);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_source_ip
+ON security_access_logs (source_ip);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_status
+ON security_access_logs (status);
