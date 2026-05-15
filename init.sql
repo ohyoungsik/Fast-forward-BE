@@ -1,5 +1,5 @@
 -- =========================================
--- 1. 사용자 계정 테이블@
+-- 1. 사용자 계정 테이블
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS public."user" (
@@ -13,9 +13,16 @@ CREATE TABLE IF NOT EXISTS public."user" (
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
     CONSTRAINT user_pkey PRIMARY KEY (id)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ix_user_email    ON public."user" USING btree (email);
-CREATE INDEX        IF NOT EXISTS ix_user_id       ON public."user" USING btree (id);
-CREATE UNIQUE INDEX IF NOT EXISTS ix_user_username ON public."user" USING btree (username);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_user_email
+ON public."user" USING btree (email);
+
+CREATE INDEX IF NOT EXISTS ix_user_id
+ON public."user" USING btree (id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_user_username
+ON public."user" USING btree (username);
+
 
 -- =========================================
 -- 2. JWT 리프레시 토큰 테이블
@@ -32,14 +39,26 @@ CREATE TABLE IF NOT EXISTS public.refreshtoken (
     CONSTRAINT refreshtoken_user_id_fkey FOREIGN KEY (user_id)
         REFERENCES public."user"(id) ON DELETE CASCADE
 );
-CREATE INDEX        IF NOT EXISTS ix_refreshtoken_expires_at     ON public.refreshtoken USING btree (expires_at);
-CREATE INDEX        IF NOT EXISTS ix_refreshtoken_id             ON public.refreshtoken USING btree (id);
-CREATE UNIQUE INDEX IF NOT EXISTS ix_refreshtoken_refresh_token  ON public.refreshtoken USING btree (refresh_token);
-CREATE INDEX        IF NOT EXISTS ix_refreshtoken_revoked        ON public.refreshtoken USING btree (revoked);
-CREATE INDEX        IF NOT EXISTS ix_refreshtoken_user_id        ON public.refreshtoken USING btree (user_id);
+
+CREATE INDEX IF NOT EXISTS ix_refreshtoken_expires_at
+ON public.refreshtoken USING btree (expires_at);
+
+CREATE INDEX IF NOT EXISTS ix_refreshtoken_id
+ON public.refreshtoken USING btree (id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_refreshtoken_refresh_token
+ON public.refreshtoken USING btree (refresh_token);
+
+CREATE INDEX IF NOT EXISTS ix_refreshtoken_revoked
+ON public.refreshtoken USING btree (revoked);
+
+CREATE INDEX IF NOT EXISTS ix_refreshtoken_user_id
+ON public.refreshtoken USING btree (user_id);
+
 
 -- =========================================
--- 3. Nginx 접근 로그 테이블  (/api/v1/logs 엔드포인트)
+-- 3. Nginx 접근 로그 테이블
+-- /api/v1/logs 엔드포인트
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS nginx_logs (
@@ -51,23 +70,29 @@ CREATE TABLE IF NOT EXISTS nginx_logs (
     create_time TIMESTAMP,
     CONSTRAINT nginx_logs_pkey PRIMARY KEY (id)
 );
-CREATE INDEX IF NOT EXISTS ix_nginx_logs_id ON nginx_logs USING btree (id);
+
+CREATE INDEX IF NOT EXISTS ix_nginx_logs_id
+ON nginx_logs USING btree (id);
+
 
 -- =========================================
--- 4. 프로메테우스에서 가져오는 데이터를 저장하기 위한 table, indexing
+-- 4. 서버 기본 정보 테이블
+-- Prometheus 메트릭 및 로그 서버 매핑용
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS server_info (
     id SERIAL PRIMARY KEY,
     server_name VARCHAR(50) UNIQUE NOT NULL,
-    server_role VARCHAR(50) NOT NULL,                        -- bastion인지, frontend, backend, db서버
+    server_role VARCHAR(50) NOT NULL,
     private_ip VARCHAR(50),
     public_ip VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+
 -- =========================================
--- 4-1. 서버 기본 정보 초기 데이터 (public_ip은 생성될때 변경해줘야함)
+-- 4-1. 서버 기본 정보 초기 데이터
+-- public_ip은 생성 시 변경 필요
 -- =========================================
 
 INSERT INTO public.server_info
@@ -82,8 +107,10 @@ ON CONFLICT (server_name) DO UPDATE SET
     private_ip = EXCLUDED.private_ip,
     public_ip = EXCLUDED.public_ip;
 
+
 -- =========================================
 -- 5. 서버 메트릭 통합 테이블
+-- CPU / Memory / Disk / Network 등
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS server_metrics (
@@ -109,7 +136,6 @@ CREATE TABLE IF NOT EXISTS server_metrics (
         REFERENCES server_info(id)
         ON DELETE CASCADE
 );
--- 1. 서버 + 메트릭 종류 + 시간 조회 
 
 CREATE INDEX IF NOT EXISTS idx_server_metrics_server_type_time
 ON server_metrics (
@@ -118,8 +144,10 @@ ON server_metrics (
     collected_at DESC
 );
 
+
 -- =========================================
 -- 6. Web Application 로그 통합 테이블
+-- nginx_access / nginx_error / fastapi_error 등
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS app_logs (
@@ -144,5 +172,65 @@ CREATE TABLE IF NOT EXISTS app_logs (
     collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_app_logs_collected_at ON app_logs (collected_at DESC);
-CREATE INDEX IF NOT EXISTS idx_app_logs_server_type  ON app_logs (server_name, log_type);
+CREATE INDEX IF NOT EXISTS idx_app_logs_collected_at
+ON app_logs (collected_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_app_logs_server_type
+ON app_logs (server_name, log_type);
+
+
+-- =========================================
+-- 7. 접근 보안 로그 테이블
+-- Linux SSH / sudo / session 인증 로그 저장
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS security_access_logs (
+    id BIGSERIAL PRIMARY KEY,
+
+    -- public-bastion, nginx-fe-server, fastapi-be-server, postgre-db-server 등
+    server_name VARCHAR(50),
+
+    -- bastion / frontend / backend / database
+    server_role VARCHAR(50),
+
+    -- auth_log / ssh_auth / sudo / session
+    log_type VARCHAR(30) NOT NULL,
+
+    -- INFO / WARN / ERROR
+    level VARCHAR(10) NOT NULL,
+
+    -- 접속 또는 인증을 시도한 계정
+    user_id VARCHAR(100),
+
+    -- 접근 출발지 IP
+    source_ip VARCHAR(50),
+
+    -- ssh / sudo / session
+    auth_method VARCHAR(30),
+
+    -- success / failed / disconnected / session_opened / session_closed / sudo
+    status VARCHAR(50),
+
+    -- 실제 로그 파일 경로
+    source_path TEXT,
+
+    -- 화면 표시용 메시지
+    message TEXT,
+
+    -- 원본 로그 JSON 보관
+    parsed_data JSONB,
+
+    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_collected_at
+ON security_access_logs (collected_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_server
+ON security_access_logs (server_name, server_role);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_source_ip
+ON security_access_logs (source_ip);
+
+CREATE INDEX IF NOT EXISTS idx_security_access_logs_status
+ON security_access_logs (status);
