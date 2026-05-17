@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.repositories.log_repository import create_nginx_log, get_log
+from app.repositories.log_repository import create_nginx_log, get_log, get_nginx_logs_filtered
+from app.schemas.infra import AppLogItem
 from app.schemas.log import LogListResponse, NginxIngestRecord
 
 router = APIRouter()
@@ -12,6 +13,35 @@ router = APIRouter()
 async def get_logs(db: Session = Depends(get_db)) -> dict:
     data = get_log(db)
     return {"payload": data}
+
+
+@router.get("/nginx", response_model=list[AppLogItem])
+def get_nginx_logs(
+    log_type: str = Query(default=None, description="'access' 또는 'error'"),
+    keyword: str = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    # GET /logs/nginx?log_type=access&keyword=404&limit=100
+    # nginx_logs 테이블에서 access/error 로그를 필터링해 반환
+    # 프론트엔드 WebApplicationLogsPage의 Nginx 탭에서 사용
+    logs = get_nginx_logs_filtered(db, log_type, keyword, limit)
+    return [
+        AppLogItem(
+            id=log.id,
+            server_name=log.server_name or "",
+            log_type=log.log_type or "",
+            level=log.level or "INFO",
+            client_ip=log.client_ip or "",
+            method=log.method or "",
+            path=log.request_path or "",
+            status_code=log.status_code or "",
+            response_time_ms=None,
+            message=log.message or "",
+            collected_at=log.create_time.strftime("%Y-%m-%d %H:%M:%S") if log.create_time else "",
+        )
+        for log in logs
+    ]
 
 
 @router.post("/ingest", status_code=status.HTTP_204_NO_CONTENT)
