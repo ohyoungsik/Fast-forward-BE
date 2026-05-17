@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.repositories.log_repository import create_nginx_log, get_log, get_nginx_logs_filtered
 from app.schemas.infra import AppLogItem
 from app.schemas.log import LogListResponse, NginxIngestRecord
+from app.utils.common import resolve_server_name
 
 router = APIRouter()
 
@@ -68,7 +69,9 @@ def ingest_nginx_logs(
     # 레코드에 log_type 필드로 'access' | 'error' 를 반드시 포함해야 함
     for rec in records:
         try:
-            create_nginx_log(db, **rec.model_dump())
+            data = rec.model_dump()
+            data["server_name"] = resolve_server_name(data.get("server_name"))
+            create_nginx_log(db, **data)
         except Exception as e:
             db.rollback()
             logger.error("nginx log insert 실패: %s | record: %s", e, rec.model_dump())

@@ -8,6 +8,7 @@ from app.repositories.security_access_log_repository import (
     get_security_access_logs,
 )
 from app.schemas.infra import FluentBitRecord, SecurityAccessLogItem, SecurityLogItem
+from app.utils.common import resolve_server_name
 
 router = APIRouter()
 
@@ -83,6 +84,7 @@ def ingest_security_logs(
     for rec in records:
         data = rec.model_dump()
         data["level"] = _resolve_level(rec.level, rec.status)
+        data["server_name"] = resolve_server_name(data.get("server_name"))
         create_security_access_log(db, **data)
 
 
