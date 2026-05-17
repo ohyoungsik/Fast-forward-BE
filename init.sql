@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS ix_nginx_logs_id       ON nginx_logs USING btree (id)
 CREATE INDEX IF NOT EXISTS ix_nginx_logs_log_type ON nginx_logs (log_type);
 
 -- 기존 테이블이 있는 경우 컬럼 추가 (신규 배포 시에는 위 CREATE TABLE로 자동 생성됨)
-ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS log_type    VARCHAR(10);
+ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS log_type    VARCHAR(30);
 ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS server_name VARCHAR(50);
 ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS level       VARCHAR(10);
 ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS message     TEXT;

@@ -5,7 +5,7 @@ from app.db.base import Base
 class Log(Base):
     __tablename__ = "nginx_logs"
     id = Column(Integer, primary_key=True, index=True)
-    log_type = Column(String(10), nullable=True)      # 'access' | 'error'
+    log_type = Column(String(30), nullable=True)      # 'access' | 'error'
     server_name = Column(String(50), nullable=True)
     client_ip = Column(String, nullable=True)
     method = Column(String, nullable=True)

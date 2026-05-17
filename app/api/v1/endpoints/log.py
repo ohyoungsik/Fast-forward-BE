@@ -1,5 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.db.session import get_db
 from app.repositories.log_repository import create_nginx_log, get_log, get_nginx_logs_filtered
@@ -63,4 +67,8 @@ def ingest_nginx_logs(
     #
     # 레코드에 log_type 필드로 'access' | 'error' 를 반드시 포함해야 함
     for rec in records:
-        create_nginx_log(db, **rec.model_dump())
+        try:
+            create_nginx_log(db, **rec.model_dump())
+        except Exception as e:
+            db.rollback()
+            logger.error("nginx log insert 실패: %s | record: %s", e, rec.model_dump())
