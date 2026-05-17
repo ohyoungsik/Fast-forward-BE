@@ -49,6 +49,22 @@ def security_logs(
     return result
 
 
+_STATUS_TO_LEVEL = {
+    "failed": "WARN",
+    "disconnected": "WARN",
+    "success": "INFO",
+    "session_opened": "INFO",
+    "session_closed": "INFO",
+    "sudo": "INFO",
+}
+
+
+def _resolve_level(level: str | None, rec_status: str | None) -> str:
+    if level:
+        return level
+    return _STATUS_TO_LEVEL.get(rec_status or "", "INFO")
+
+
 @router.post("/ingest", status_code=status.HTTP_204_NO_CONTENT)
 def ingest_security_logs(
     records: list[FluentBitRecord],
@@ -65,7 +81,9 @@ def ingest_security_logs(
     #       URI   /api/v1/security/logs/ingest
     #       Format json
     for rec in records:
-        create_security_access_log(db, **rec.model_dump())
+        data = rec.model_dump()
+        data["level"] = _resolve_level(rec.level, rec.status)
+        create_security_access_log(db, **data)
 
 
 @router.get("/access", response_model=list[SecurityAccessLogItem])

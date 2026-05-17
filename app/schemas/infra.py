@@ -43,7 +43,7 @@ class FluentBitRecord(BaseModel):
     server_name: Optional[str] = None
     server_role: Optional[str] = None
     log_type: str
-    level: str
+    level: Optional[str] = None
     user_id: Optional[str] = None
     source_ip: Optional[str] = None
     auth_method: Optional[str] = None
