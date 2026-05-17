@@ -38,6 +38,38 @@ class SecurityLogItem(BaseModel):
     service: str = "nginx"
 
 
+class FluentBitRecord(BaseModel):
+    """fluent-bit HTTP output 플러그인이 전송하는 레코드 한 건"""
+    server_name: Optional[str] = None
+    server_role: Optional[str] = None
+    log_type: str
+    level: str
+    user_id: Optional[str] = None
+    source_ip: Optional[str] = None
+    auth_method: Optional[str] = None
+    status: Optional[str] = None
+    source_path: Optional[str] = None
+    message: Optional[str] = None
+    parsed_data: Optional[dict] = None
+
+
+class SecurityAccessLogItem(BaseModel):
+    id: int
+    server_name: Optional[str] = None
+    server_role: Optional[str] = None
+    log_type: str
+    level: str
+    user_id: Optional[str] = None
+    source_ip: Optional[str] = None
+    auth_method: Optional[str] = None
+    status: Optional[str] = None
+    source_path: Optional[str] = None
+    message: Optional[str] = None
+    collected_at: str
+
+    model_config = {"from_attributes": True}
+
+
 class AppLogItem(BaseModel):
     id: int
     server_name: Optional[str] = None

@@ -39,19 +39,31 @@ CREATE INDEX        IF NOT EXISTS ix_refreshtoken_revoked        ON public.refre
 CREATE INDEX        IF NOT EXISTS ix_refreshtoken_user_id        ON public.refreshtoken USING btree (user_id);
 
 -- =========================================
--- 3. Nginx 접근 로그 테이블  (/api/v1/logs 엔드포인트)
+-- 3. Nginx 접근/에러 로그 테이블  (/api/v1/logs 엔드포인트)
+-- fluent-bit → POST /api/v1/logs/ingest 로 수신
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS nginx_logs (
     id SERIAL NOT NULL,
-    client_ip VARCHAR,
-    method VARCHAR,
+    log_type   VARCHAR(10),       -- 'access' | 'error'
+    server_name VARCHAR(50),      -- 로그를 전송한 서버명
+    client_ip  VARCHAR,
+    method     VARCHAR,
     request_path VARCHAR,
-    status_code VARCHAR,
+    status_code  VARCHAR,
+    level      VARCHAR(10),       -- error 로그용: error / warn / info / crit
+    message    TEXT,              -- error 로그용: 에러 메시지 본문
     create_time TIMESTAMP,
     CONSTRAINT nginx_logs_pkey PRIMARY KEY (id)
 );
-CREATE INDEX IF NOT EXISTS ix_nginx_logs_id ON nginx_logs USING btree (id);
+CREATE INDEX IF NOT EXISTS ix_nginx_logs_id       ON nginx_logs USING btree (id);
+CREATE INDEX IF NOT EXISTS ix_nginx_logs_log_type ON nginx_logs (log_type);
+
+-- 기존 테이블이 있는 경우 컬럼 추가 (신규 배포 시에는 위 CREATE TABLE로 자동 생성됨)
+ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS log_type    VARCHAR(10);
+ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS server_name VARCHAR(50);
+ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS level       VARCHAR(10);
+ALTER TABLE nginx_logs ADD COLUMN IF NOT EXISTS message     TEXT;
 
 -- =========================================
 -- 4. 프로메테우스에서 가져오는 데이터를 저장하기 위한 table, indexing
