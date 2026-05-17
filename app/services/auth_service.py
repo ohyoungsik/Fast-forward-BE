@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
 
 from fastapi import HTTPException, status
 from jose import JWTError
@@ -31,7 +34,7 @@ def _add_auth_log(db: Session, *, message: str, level: str = "INFO", path: str, 
         path=path,
         status_code=status_code,
         message=message,
-        collected_at=datetime.utcnow(),
+        collected_at=datetime.now(KST),
     ))
     db.commit()
 
@@ -67,7 +70,7 @@ def login(db: Session, payload: LoginRequest) -> TokenResponse:
     access_token = create_access_token(username=user.username, user_id=user.id)
     refresh_token = create_refresh_token(username=user.username, user_id=user.id)
 
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES_REFRESH)
+    expires_at = datetime.now(KST) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES_REFRESH)
     refresh_token_repository.create_refresh_token(
         db,
         user_id=user.id,
@@ -83,7 +86,7 @@ def refresh(db: Session, payload: RefreshRequest) -> RefreshResponse:
     rt = refresh_token_repository.get_refresh_token(db, refresh_token=payload.refreshToken)
     if rt is None or rt.revoked:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-    if rt.expires_at <= datetime.now(timezone.utc):
+    if rt.expires_at <= datetime.now(KST):
         refresh_token_repository.revoke_refresh_token(db, refresh_token=payload.refreshToken)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired")
 
@@ -112,7 +115,7 @@ def refresh(db: Session, payload: RefreshRequest) -> RefreshResponse:
     new_access = create_access_token(username=user.username, user_id=user.id)
     new_refresh = create_refresh_token(username=user.username, user_id=user.id)
 
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES_REFRESH)
+    expires_at = datetime.now(KST) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES_REFRESH)
     refresh_token_repository.create_refresh_token(
         db,
         user_id=user.id,

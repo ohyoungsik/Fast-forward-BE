@@ -3,6 +3,9 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -51,7 +54,7 @@ def _write_log_sync(server_name, log_type, level, client_ip, method, path, statu
             status_code=str(status_code),
             response_time_ms=elapsed_ms,
             message=message,
-            collected_at=datetime.utcnow(),
+            collected_at=datetime.now(KST),
         ))
         db.commit()
     except Exception:

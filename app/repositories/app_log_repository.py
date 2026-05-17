@@ -1,4 +1,7 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -34,7 +37,7 @@ def get_webapp_logs(
 
 def create_app_log(db: Session, **kwargs) -> AppLog:
     # FastAPI 미들웨어 또는 Fluent Bit ingest에서 로그 한 건 저장
-    kwargs.setdefault("collected_at", datetime.utcnow())
+    kwargs.setdefault("collected_at", datetime.now(KST))
     log = AppLog(**kwargs)
     db.add(log)
     db.commit()

@@ -1,6 +1,9 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
+
+KST = ZoneInfo("Asia/Seoul")
 
 from app.models.log import Log
 
@@ -10,7 +13,7 @@ def get_log(db: Session):
 
 
 def create_nginx_log(db: Session, **kwargs) -> Log:
-    kwargs.setdefault("create_time", datetime.utcnow())
+    kwargs.setdefault("create_time", datetime.now(KST))
     log = Log(**kwargs)
     db.add(log)
     db.commit()

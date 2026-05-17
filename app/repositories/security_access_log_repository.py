@@ -1,13 +1,16 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc
+
+KST = ZoneInfo("Asia/Seoul")
 from sqlalchemy.orm import Session
 
 from app.models.security_access_log import SecurityAccessLog
 
 
 def create_security_access_log(db: Session, **kwargs) -> SecurityAccessLog:
-    kwargs.setdefault("collected_at", datetime.utcnow())
+    kwargs.setdefault("collected_at", datetime.now(KST))
     log = SecurityAccessLog(**kwargs)
     db.add(log)
     db.commit()
