@@ -24,14 +24,15 @@ async def get_logs(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/nginx", response_model=list[AppLogItem])
 def get_nginx_logs(
-    log_type: str = Query(default=None, description="'access' 또는 'error'"),
+    log_type: str = Query(default=None, description="'nginx_access' 또는 'nginx_error'"),
+    server_name: str = Query(default=None),
     keyword: str = Query(default=None),
     limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
-    # GET /logs/nginx?log_type=access&keyword=404&limit=100
+    # GET /logs/nginx?log_type=nginx_access&keyword=404&limit=100
     # nginx_logs 테이블에서 access/error 로그를 필터링해 반환
-    logs = get_nginx_logs_filtered(db, log_type, keyword, limit)
+    logs = get_nginx_logs_filtered(db, log_type, server_name, keyword, limit)
     return [
         AppLogItem(
             id=log.id,

@@ -16,6 +16,7 @@ def get_log(db: Session):
 def get_nginx_logs_filtered(
     db: Session,
     log_type: str | None = None,
+    server_name: str | None = None,
     keyword: str | None = None,
     limit: int = 200,
 ) -> list[Log]:
@@ -23,6 +24,9 @@ def get_nginx_logs_filtered(
 
     if log_type:
         query = query.filter(Log.log_type == log_type)
+
+    if server_name:
+        query = query.filter(Log.server_name == server_name)
 
     if keyword:
         kw = f"%{keyword}%"
