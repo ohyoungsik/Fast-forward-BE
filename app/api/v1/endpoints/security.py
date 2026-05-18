@@ -132,15 +132,23 @@ def ingest_security_logs(
     #       Port  8000
     #       URI   /api/v1/security/logs/ingest
     #       Format json
+    print(f"[security/ingest] 수신 레코드 수: {len(records)}")
     for rec in records:
+        print(f"[security/ingest] 원본 레코드: {rec.model_dump()}")
         if rec.status in _SKIP_STATUSES:
+            print(f"[security/ingest] SKIP (status={rec.status})")
             continue
         data = rec.model_dump()
         data["level"] = _resolve_level(rec.level, rec.status)
         data["server_name"] = resolve_server_name(data.get("server_name"))
         data["message"] = _build_message(rec)
         data["parsed_data"] = _build_parsed_data(rec)
-        create_security_access_log(db, **data)
+        print(f"[security/ingest] 저장 시도: {data}")
+        try:
+            create_security_access_log(db, **data)
+            print(f"[security/ingest] 저장 완료: status={rec.status}, user={rec.user_id}, ip={rec.source_ip}")
+        except Exception as e:
+            print(f"[security/ingest] 저장 실패: {e} | data={data}")
 
 
 @router.get("/access", response_model=list[SecurityAccessLogItem])
