@@ -1,7 +1,10 @@
+import logging
 import re
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.db.session import get_db
 from app.repositories.infra_repository import get_security_logs
@@ -145,13 +148,10 @@ def ingest_security_logs(
 ):
     # POST /security/logs/ingest
     # fluent-bit HTTP output 플러그인에서 security_access_logs 레코드를 배치로 수신
-    print(f"[security/ingest] 수신 레코드 수: {len(records)}")
+    # auth.log 원문(rec.log)을 파싱해 user_id/source_ip/auth_method/status 추출 후 저장
     for rec in records:
-        print(f"[security/ingest] 원본 log: {rec.log}")
-
         parsed = _parse_auth_log(rec.log or "")
         if parsed is None:
-            print(f"[security/ingest] SKIP (파싱 불필요 이벤트)")
             continue
 
         final_status = parsed.get("status")
@@ -173,12 +173,10 @@ def ingest_security_logs(
             "message":     _build_message(final_status, user_id, source_ip, auth_method, source_path),
             "parsed_data": _build_parsed_data(final_status, user_id, source_ip, auth_method, source_path),
         }
-        print(f"[security/ingest] 저장 시도: {data}")
         try:
             create_security_access_log(db, **data)
-            print(f"[security/ingest] 저장 완료: status={final_status}, user={user_id}, ip={source_ip}")
         except Exception as e:
-            print(f"[security/ingest] 저장 실패: {e} | data={data}")
+            logger.error("security log insert 실패: %s | data: %s", e, data)
 
 
 @router.get("/access", response_model=list[SecurityAccessLogItem])

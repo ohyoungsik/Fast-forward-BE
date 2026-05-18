@@ -13,6 +13,8 @@ from app.utils.common import resolve_server_name
 
 router = APIRouter()
 
+_CODE_TO_LEVEL = {"2": "INFO", "3": "INFO", "4": "WARN", "5": "ERROR"}
+
 
 @router.get("", response_model=LogListResponse, summary="Logs")
 async def get_logs(db: Session = Depends(get_db)) -> dict:
@@ -29,7 +31,6 @@ def get_nginx_logs(
 ):
     # GET /logs/nginx?log_type=access&keyword=404&limit=100
     # nginx_logs 테이블에서 access/error 로그를 필터링해 반환
-    # 프론트엔드 WebApplicationLogsPage의 Nginx 탭에서 사용
     logs = get_nginx_logs_filtered(db, log_type, keyword, limit)
     return [
         AppLogItem(
@@ -54,10 +55,13 @@ def ingest_nginx_logs(
     records: list[NginxIngestRecord],
     db: Session = Depends(get_db),
 ):
-    print(f"[nginx/ingest] 수신 레코드 수: {len(records)}")
-    print(f'[nginx/ingest] 데이터 내용!! ------------${records} ')
+    # POST /logs/ingest
+    # fluent-bit HTTP output 플러그인에서 nginx access/error 로그를 배치로 수신
+    # fluent-bit 필드 매핑: remote→client_ip, path→request_path, code→status_code
     for rec in records:
         try:
+            level = rec.level or _CODE_TO_LEVEL.get((rec.code or "")[:1], "INFO")
+            message = rec.message or f"[{level}] {rec.method} {rec.path} → {rec.code} | {rec.remote}"
             data = {
                 "log_type":     rec.log_type,
                 "server_name":  resolve_server_name(rec.server_name),
@@ -65,13 +69,11 @@ def ingest_nginx_logs(
                 "method":       rec.method,
                 "request_path": rec.path,
                 "status_code":  rec.code,
-                "level":        rec.level,
-                "message":      rec.message,
+                "level":        level,
+                "message":      message,
                 "create_time":  rec.create_time,
             }
             create_nginx_log(db, **data)
-            print(f"[nginx/ingest] 저장 완료: log_type={rec.log_type}, ip={rec.remote}, path={rec.path}, code={rec.code}")
         except Exception as e:
             db.rollback()
             logger.error("nginx log insert 실패: %s | record: %s", e, rec.model_dump())
-            print(f"[nginx/ingest] 저장 실패: {e}")
