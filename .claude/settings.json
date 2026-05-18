@@ -1,14 +1,17 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(cd /d \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\")",
+      "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8001)",
+      "Bash(Get-ChildItem -Path \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\" -Directory)",
+      "Bash(Select-Object Name)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\" -Exclude \".venv\" | ForEach-Object { $_.Name })"
+    ],
     "additionalDirectories": [
       "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src\\api",
       "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src\\components",
       "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src\\pages",
       "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src"
-    ],
-    "allow": [
-      "Bash(cd /d \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\")",
-      "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8001)"
     ]
   }
 }

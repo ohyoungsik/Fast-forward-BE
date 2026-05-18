@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -25,8 +25,9 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> R
 
 
 @router.post("/login", response_model=TokenResponse, summary="Login")
-async def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    return auth_service.login(db, payload)
+async def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    client_ip = request.client.host if request.client else None
+    return auth_service.login(db, payload, client_ip=client_ip)
 
 
 @router.post("/refresh", response_model=RefreshResponse, summary="Refresh token")

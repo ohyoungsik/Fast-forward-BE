@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.models.app_log import AppLog
-from app.repositories import refresh_token_repository, user_repository
+from app.repositories import refresh_token_repository, security_access_log_repository, user_repository
 from app.schemas.auth_schema import (
     LoginRequest,
     MeResponse,
@@ -55,17 +55,56 @@ def register(db: Session, payload: RegisterRequest) -> None:
     )
 
 
-def login(db: Session, payload: LoginRequest) -> TokenResponse:
+def _add_security_log(db: Session, *, event_type: str, username: str, client_ip: str | None, message: str, level: str = "WARN") -> None:
+    security_access_log_repository.create_security_access_log(
+        db,
+        server_name="fastapi-be-server",
+        log_type=event_type,
+        level=level,
+        user_id=username,
+        source_ip=client_ip or "",
+        auth_method="password",
+        status=event_type,
+        message=message,
+    )
+
+
+def login(db: Session, payload: LoginRequest, *, client_ip: str | None = None) -> TokenResponse:
     user = user_repository.get_user_by_username(db, payload.username)
     if user is None:
         _add_auth_log(db, level="WARN", message=f"로그인 실패 | user: {payload.username} | 존재하지 않는 유저", path="/api/v1/auth/login", status_code="401")
-        raise HTTPException(status_code=status.HTTP_401_NOT_FOUND, detail="유저가 존재하지 않음 User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유저가 존재하지 않음 User not found")
     if not user.is_active:
         _add_auth_log(db, level="WARN", message=f"로그인 실패 | user: {user.username} | 비활성화 계정", path="/api/v1/auth/login", status_code="403")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+
+    # 계정 잠금 확인
+    if user.locked_until:
+        now = datetime.now(KST)
+        if user.locked_until > now:
+            remaining = int((user.locked_until - now).total_seconds() / 60) + 1
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail=f"계정이 잠겼습니다. {remaining}분 후 다시 시도해주세요.",
+            )
+        # 잠금 시간 경과 → 자동 해제
+        user_repository.reset_login_attempts(db, user)
+
     if not verify_password(payload.password, user.password_hash):
-        _add_auth_log(db, level="WARN", message=f"로그인 실패 | user: {user.username} | 비밀번호 불일치", path="/api/v1/auth/login", status_code="401")
+        updated = user_repository.record_failed_login(db, user)
+        count = updated.failed_login_count
+        if count >= 5:
+            _add_auth_log(db, level="ERROR", message=f"계정 잠금 | user: {user.username} | 5회 실패", path="/api/v1/auth/login", status_code="423")
+            _add_security_log(db, event_type="ACCOUNT_LOCKED", username=user.username, client_ip=client_ip, message="로그인 5회 실패로 5분 잠금")
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail="로그인 5회 실패로 계정이 5분 잠겼습니다.",
+            )
+        _add_auth_log(db, level="WARN", message=f"로그인 실패 | user: {user.username} | 비밀번호 불일치 ({count}/5)", path="/api/v1/auth/login", status_code="401")
+        _add_security_log(db, event_type="LOGIN_FAILED", username=user.username, client_ip=client_ip, message=f"로그인 실패 {count}/5")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    user_repository.reset_login_attempts(db, user)
 
     access_token = create_access_token(username=user.username, user_id=user.id)
     refresh_token = create_refresh_token(username=user.username, user_id=user.id)
