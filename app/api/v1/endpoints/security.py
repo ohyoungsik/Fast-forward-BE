@@ -52,18 +52,69 @@ def security_logs(
 
 _STATUS_TO_LEVEL = {
     "failed": "WARN",
-    "disconnected": "WARN",
-    "success": "INFO",
     "session_opened": "INFO",
     "session_closed": "INFO",
     "sudo": "INFO",
 }
+
+# 저장하지 않을 status: session_opened/session_closed와 중복되는 이벤트
+_SKIP_STATUSES = {"success", "disconnected"}
 
 
 def _resolve_level(level: str | None, rec_status: str | None) -> str:
     if level:
         return level
     return _STATUS_TO_LEVEL.get(rec_status or "", "INFO")
+
+
+def _build_message(rec: FluentBitRecord) -> str | None:
+    """Fluent-bit에서 message가 없을 때 status 기반으로 사람이 읽기 쉬운 메시지 생성"""
+    if rec.message:
+        return rec.message
+    uid = rec.user_id or "unknown"
+    ip = rec.source_ip or "-"
+    method = rec.auth_method or "-"
+    if rec.status == "session_opened":
+        return f"SSH 접속 성공 — user={uid}, from={ip}, method={method}"
+    if rec.status == "session_closed":
+        return f"SSH 세션 종료 — user={uid}"
+    if rec.status == "failed":
+        return f"SSH 인증 실패 — user={uid}, from={ip}"
+    if rec.status == "sudo":
+        cmd = rec.source_path or "-"
+        return f"sudo 실행 — user={uid}, command={cmd}"
+    return None
+
+
+def _build_parsed_data(rec: FluentBitRecord) -> dict | None:
+    """Fluent-bit parsed_data가 없을 때 status별로 구조화된 부가 정보 생성"""
+    if rec.parsed_data:
+        return rec.parsed_data
+    if rec.status == "session_opened":
+        return {
+            "event": "ssh_login",
+            "user_id": rec.user_id,
+            "source_ip": rec.source_ip,
+            "auth_method": rec.auth_method,
+        }
+    if rec.status == "session_closed":
+        return {
+            "event": "ssh_logout",
+            "user_id": rec.user_id,
+        }
+    if rec.status == "failed":
+        return {
+            "event": "ssh_auth_failed",
+            "user_id": rec.user_id,
+            "source_ip": rec.source_ip,
+        }
+    if rec.status == "sudo":
+        return {
+            "event": "sudo_command",
+            "user_id": rec.user_id,
+            "command": rec.source_path,
+        }
+    return None
 
 
 @router.post("/ingest", status_code=status.HTTP_204_NO_CONTENT)
@@ -82,9 +133,13 @@ def ingest_security_logs(
     #       URI   /api/v1/security/logs/ingest
     #       Format json
     for rec in records:
+        if rec.status in _SKIP_STATUSES:
+            continue
         data = rec.model_dump()
         data["level"] = _resolve_level(rec.level, rec.status)
         data["server_name"] = resolve_server_name(data.get("server_name"))
+        data["message"] = _build_message(rec)
+        data["parsed_data"] = _build_parsed_data(rec)
         create_security_access_log(db, **data)
 
 
