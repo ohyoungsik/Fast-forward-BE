@@ -11,8 +11,14 @@ CREATE TABLE IF NOT EXISTS public."user" (
     is_active BOOL DEFAULT TRUE,
     is_superuser BOOL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    failed_login_count INT NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ NULL,
     CONSTRAINT user_pkey PRIMARY KEY (id)
 );
+
+-- 기존 테이블이 있는 경우 컬럼 추가
+ALTER TABLE public."user" ADD COLUMN IF NOT EXISTS failed_login_count INT NOT NULL DEFAULT 0;
+ALTER TABLE public."user" ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_user_email    ON public."user" USING btree (email);
 CREATE INDEX        IF NOT EXISTS ix_user_id       ON public."user" USING btree (id);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_user_username ON public."user" USING btree (username);
