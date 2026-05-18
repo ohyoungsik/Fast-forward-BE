@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
@@ -57,63 +59,82 @@ _STATUS_TO_LEVEL = {
     "sudo": "INFO",
 }
 
-# 저장하지 않을 status: session_opened/session_closed와 중복되는 이벤트
-_SKIP_STATUSES = {"success", "disconnected"}
 
-
-def _resolve_level(level: str | None, rec_status: str | None) -> str:
-    if level:
-        return level
+def _resolve_level(rec_status: str | None) -> str:
     return _STATUS_TO_LEVEL.get(rec_status or "", "INFO")
 
 
-def _build_message(rec: FluentBitRecord) -> str | None:
-    """Fluent-bit에서 message가 없을 때 status 기반으로 사람이 읽기 쉬운 메시지 생성"""
-    if rec.message:
-        return rec.message
-    uid = rec.user_id or "unknown"
-    ip = rec.source_ip or "-"
-    method = rec.auth_method or "-"
-    if rec.status == "session_opened":
-        return f"SSH 접속 성공 — user={uid}, from={ip}, method={method}"
-    if rec.status == "session_closed":
-        return f"SSH 세션 종료 — user={uid}"
-    if rec.status == "failed":
-        return f"SSH 인증 실패 — user={uid}, from={ip}"
-    if rec.status == "sudo":
-        cmd = rec.source_path or "-"
-        return f"sudo 실행 — user={uid}, command={cmd}"
+def _parse_auth_log(raw: str) -> dict | None:
+    """auth.log 원문에서 status/user_id/source_ip/auth_method/source_path 추출.
+    저장 불필요한 이벤트는 None 반환."""
+
+    # SSH 인증 성공: Accepted publickey for ubuntu from 1.2.3.4 port 22 ssh2
+    m = re.search(r"Accepted (\w+) for (\S+) from ([\d.:a-fA-F]+) port \d+", raw)
+    if m:
+        return {
+            "status": "session_opened",
+            "auth_method": m.group(1),
+            "user_id": m.group(2),
+            "source_ip": m.group(3),
+        }
+
+    # SSH 인증 실패: Failed password/publickey for [invalid user] ubuntu from 1.2.3.4 port 22
+    m = re.search(r"Failed (\w+) for (?:invalid user )?(\S+) from ([\d.:a-fA-F]+) port \d+", raw)
+    if m:
+        return {
+            "status": "failed",
+            "auth_method": m.group(1),
+            "user_id": m.group(2),
+            "source_ip": m.group(3),
+        }
+
+    # SSH 세션 종료: pam_unix(sshd:session): session closed for user ubuntu
+    m = re.search(r"sshd.*session closed for user (\S+)", raw)
+    if m:
+        return {
+            "status": "session_closed",
+            "user_id": m.group(1),
+        }
+
+    # sudo 실제 명령: sudo:   ubuntu : TTY=pts/1 ; PWD=... ; USER=root ; COMMAND=/usr/bin/...
+    m = re.search(r"sudo:\s{1,5}(\S+)\s+:.*?COMMAND=(.+)$", raw)
+    if m:
+        return {
+            "status": "sudo",
+            "user_id": m.group(1),
+            "source_path": m.group(2).strip(),
+        }
+
+    # 나머지(sshd session opened, sudo session opened/closed 등): 중복이므로 저장 안 함
     return None
 
 
-def _build_parsed_data(rec: FluentBitRecord) -> dict | None:
-    """Fluent-bit parsed_data가 없을 때 status별로 구조화된 부가 정보 생성"""
-    if rec.parsed_data:
-        return rec.parsed_data
-    if rec.status == "session_opened":
-        return {
-            "event": "ssh_login",
-            "user_id": rec.user_id,
-            "source_ip": rec.source_ip,
-            "auth_method": rec.auth_method,
-        }
-    if rec.status == "session_closed":
-        return {
-            "event": "ssh_logout",
-            "user_id": rec.user_id,
-        }
-    if rec.status == "failed":
-        return {
-            "event": "ssh_auth_failed",
-            "user_id": rec.user_id,
-            "source_ip": rec.source_ip,
-        }
-    if rec.status == "sudo":
-        return {
-            "event": "sudo_command",
-            "user_id": rec.user_id,
-            "command": rec.source_path,
-        }
+def _build_message(status: str | None, user_id: str | None, source_ip: str | None,
+                   auth_method: str | None, source_path: str | None) -> str | None:
+    uid = user_id or "unknown"
+    ip = source_ip or "-"
+    method = auth_method or "-"
+    if status == "session_opened":
+        return f"SSH 접속 성공 — user={uid}, from={ip}, method={method}"
+    if status == "session_closed":
+        return f"SSH 세션 종료 — user={uid}"
+    if status == "failed":
+        return f"SSH 인증 실패 — user={uid}, from={ip}"
+    if status == "sudo":
+        return f"sudo 실행 — user={uid}, command={source_path or '-'}"
+    return None
+
+
+def _build_parsed_data(status: str | None, user_id: str | None, source_ip: str | None,
+                       auth_method: str | None, source_path: str | None) -> dict | None:
+    if status == "session_opened":
+        return {"event": "ssh_login", "user_id": user_id, "source_ip": source_ip, "auth_method": auth_method}
+    if status == "session_closed":
+        return {"event": "ssh_logout", "user_id": user_id}
+    if status == "failed":
+        return {"event": "ssh_auth_failed", "user_id": user_id, "source_ip": source_ip}
+    if status == "sudo":
+        return {"event": "sudo_command", "user_id": user_id, "command": source_path}
     return None
 
 
@@ -124,31 +145,38 @@ def ingest_security_logs(
 ):
     # POST /security/logs/ingest
     # fluent-bit HTTP output 플러그인에서 security_access_logs 레코드를 배치로 수신
-    # fluent-bit 설정 예시:
-    #   [OUTPUT]
-    #       Name  http
-    #       Match security.*
-    #       Host  <BE_HOST>
-    #       Port  8000
-    #       URI   /api/v1/security/logs/ingest
-    #       Format json
     print(f"[security/ingest] 수신 레코드 수: {len(records)}")
     for rec in records:
-        print(f"[security/ingest] 원본 레코드: {rec.model_dump()}")
-        if rec.model_extra:
-            print(f"[security/ingest] 미인식 extra 필드: {rec.model_extra}")
-        if rec.status in _SKIP_STATUSES:
-            print(f"[security/ingest] SKIP (status={rec.status})")
+        print(f"[security/ingest] 원본 log: {rec.log}")
+
+        parsed = _parse_auth_log(rec.log or "")
+        if parsed is None:
+            print(f"[security/ingest] SKIP (파싱 불필요 이벤트)")
             continue
-        data = rec.model_dump()
-        data["level"] = _resolve_level(rec.level, rec.status)
-        data["server_name"] = resolve_server_name(data.get("server_name"))
-        data["message"] = _build_message(rec)
-        data["parsed_data"] = _build_parsed_data(rec)
+
+        final_status = parsed.get("status")
+        user_id     = parsed.get("user_id")
+        source_ip   = parsed.get("source_ip")
+        auth_method = parsed.get("auth_method")
+        source_path = parsed.get("source_path")
+
+        data = {
+            "server_name": resolve_server_name(rec.server_name),
+            "server_role": rec.server_role,
+            "log_type":    rec.log_type,
+            "level":       _resolve_level(final_status),
+            "user_id":     user_id,
+            "source_ip":   source_ip,
+            "auth_method": auth_method,
+            "status":      final_status,
+            "source_path": source_path or rec.source_path,
+            "message":     _build_message(final_status, user_id, source_ip, auth_method, source_path),
+            "parsed_data": _build_parsed_data(final_status, user_id, source_ip, auth_method, source_path),
+        }
         print(f"[security/ingest] 저장 시도: {data}")
         try:
             create_security_access_log(db, **data)
-            print(f"[security/ingest] 저장 완료: status={rec.status}, user={rec.user_id}, ip={rec.source_ip}")
+            print(f"[security/ingest] 저장 완료: status={final_status}, user={user_id}, ip={source_ip}")
         except Exception as e:
             print(f"[security/ingest] 저장 실패: {e} | data={data}")
 

@@ -40,7 +40,7 @@ class SecurityLogItem(BaseModel):
 
 class FluentBitRecord(BaseModel):
     """fluent-bit HTTP output 플러그인이 전송하는 레코드 한 건"""
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="ignore")
 
     server_name: Optional[str] = None
     server_role: Optional[str] = None
@@ -53,6 +53,8 @@ class FluentBitRecord(BaseModel):
     source_path: Optional[str] = None
     message: Optional[str] = None
     parsed_data: Optional[dict] = None
+    log: Optional[str] = None    # fluent-bit이 전송하는 auth.log 원문
+    date: Optional[float] = None  # fluent-bit Unix timestamp (저장 안 함)
 
 
 class SecurityAccessLogItem(BaseModel):
