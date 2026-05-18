@@ -55,6 +55,7 @@ def ingest_nginx_logs(
     db: Session = Depends(get_db),
 ):
     print(f"[nginx/ingest] 수신 레코드 수: {len(records)}")
+    print(f'[nginx/ingest] 데이터 내용!! ------------${records} ')
     for rec in records:
         try:
             data = {
