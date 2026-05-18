@@ -37,7 +37,7 @@ def get_nginx_logs_filtered(
             | Log.message.ilike(kw)
         )
 
-    return query.order_by(desc(Log.create_time)).limit(limit).all()
+    return query.order_by(desc(Log.id)).limit(limit).all()
 
 
 def create_nginx_log(db: Session, **kwargs) -> Log:
