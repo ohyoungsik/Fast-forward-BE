@@ -56,14 +56,20 @@ def ingest_nginx_logs(
 ):
     print(f"[nginx/ingest] 수신 레코드 수: {len(records)}")
     for rec in records:
-        print(f"[nginx/ingest] 원본 레코드: {rec.model_dump()}")
-        if rec.model_extra:
-            print(f"[nginx/ingest] 미인식 extra 필드: {rec.model_extra}")
         try:
-            data = rec.model_dump()
-            data["server_name"] = resolve_server_name(data.get("server_name"))
+            data = {
+                "log_type":     rec.log_type,
+                "server_name":  resolve_server_name(rec.server_name),
+                "client_ip":    rec.remote,
+                "method":       rec.method,
+                "request_path": rec.path,
+                "status_code":  rec.code,
+                "level":        rec.level,
+                "message":      rec.message,
+                "create_time":  rec.create_time,
+            }
             create_nginx_log(db, **data)
-            print(f"[nginx/ingest] 저장 완료: log_type={rec.log_type}, ip={rec.client_ip}, path={rec.request_path}")
+            print(f"[nginx/ingest] 저장 완료: log_type={rec.log_type}, ip={rec.remote}, path={rec.path}, code={rec.code}")
         except Exception as e:
             db.rollback()
             logger.error("nginx log insert 실패: %s | record: %s", e, rec.model_dump())
