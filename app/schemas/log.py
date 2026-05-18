@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, List
+
+from pydantic import BaseModel, ConfigDict
 
 
 class LogSchema(BaseModel):
@@ -28,6 +29,8 @@ class NginxIngestRecord(BaseModel):
     access 로그: log_type='access', client_ip / method / request_path / status_code 사용
     error  로그: log_type='error',  level / message 사용
     """
+    model_config = ConfigDict(extra="allow")
+
     log_type: str                          # 'access' | 'error'
     server_name: Optional[str] = None
     client_ip: Optional[str] = None
@@ -37,3 +40,5 @@ class NginxIngestRecord(BaseModel):
     level: Optional[str] = None
     message: Optional[str] = None
     create_time: Optional[datetime] = None
+    log: Optional[str] = None    # fluent-bit 원본 로그 라인
+    date: Optional[float] = None  # fluent-bit Unix timestamp (저장 안 함)

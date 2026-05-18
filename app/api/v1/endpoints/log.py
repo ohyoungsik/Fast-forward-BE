@@ -54,24 +54,17 @@ def ingest_nginx_logs(
     records: list[NginxIngestRecord],
     db: Session = Depends(get_db),
 ):
-    # POST /logs/ingest
-    # fluent-bit HTTP output 플러그인에서 nginx access/error 로그를 배치로 수신
-    #
-    # fluent-bit 설정 예시:
-    #   [OUTPUT]
-    #       Name   http
-    #       Match  nginx.*          ← nginx.access / nginx.error 둘 다 매칭
-    #       Host   <BE_HOST>
-    #       Port   8000
-    #       URI    /api/v1/logs/ingest
-    #       Format json
-    #
-    # 레코드에 log_type 필드로 'access' | 'error' 를 반드시 포함해야 함
+    print(f"[nginx/ingest] 수신 레코드 수: {len(records)}")
     for rec in records:
+        print(f"[nginx/ingest] 원본 레코드: {rec.model_dump()}")
+        if rec.model_extra:
+            print(f"[nginx/ingest] 미인식 extra 필드: {rec.model_extra}")
         try:
             data = rec.model_dump()
             data["server_name"] = resolve_server_name(data.get("server_name"))
             create_nginx_log(db, **data)
+            print(f"[nginx/ingest] 저장 완료: log_type={rec.log_type}, ip={rec.client_ip}, path={rec.request_path}")
         except Exception as e:
             db.rollback()
             logger.error("nginx log insert 실패: %s | record: %s", e, rec.model_dump())
+            print(f"[nginx/ingest] 저장 실패: {e}")
