@@ -10,7 +10,7 @@ from app.models.security_access_log import SecurityAccessLog
 
 
 def create_security_access_log(db: Session, **kwargs) -> SecurityAccessLog:
-    kwargs.setdefault("collected_at", datetime.now(KST))
+    kwargs.setdefault("collected_at", datetime.now(KST).replace(tzinfo=None))
     log = SecurityAccessLog(**kwargs)
     db.add(log)
     db.commit()

@@ -54,7 +54,7 @@ def _write_log_sync(server_name, log_type, level, client_ip, method, path, statu
             status_code=str(status_code),
             response_time_ms=elapsed_ms,
             message=message,
-            collected_at=datetime.now(KST),
+            collected_at=datetime.now(KST).replace(tzinfo=None),
         ))
         db.commit()
     except Exception:
