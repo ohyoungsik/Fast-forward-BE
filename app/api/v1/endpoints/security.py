@@ -135,6 +135,8 @@ def ingest_security_logs(
     print(f"[security/ingest] 수신 레코드 수: {len(records)}")
     for rec in records:
         print(f"[security/ingest] 원본 레코드: {rec.model_dump()}")
+        if rec.model_extra:
+            print(f"[security/ingest] 미인식 extra 필드: {rec.model_extra}")
         if rec.status in _SKIP_STATUSES:
             print(f"[security/ingest] SKIP (status={rec.status})")
             continue

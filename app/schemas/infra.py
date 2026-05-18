@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ServerItem(BaseModel):
@@ -40,6 +40,8 @@ class SecurityLogItem(BaseModel):
 
 class FluentBitRecord(BaseModel):
     """fluent-bit HTTP output 플러그인이 전송하는 레코드 한 건"""
+    model_config = ConfigDict(extra="allow")
+
     server_name: Optional[str] = None
     server_role: Optional[str] = None
     log_type: str
