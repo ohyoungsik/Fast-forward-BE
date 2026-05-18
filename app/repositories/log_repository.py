@@ -41,7 +41,8 @@ def get_nginx_logs_filtered(
 
 
 def create_nginx_log(db: Session, **kwargs) -> Log:
-    kwargs.setdefault("create_time", datetime.now(KST).replace(tzinfo=None))
+    if not kwargs.get("create_time"):
+        kwargs["create_time"] = datetime.now(KST).replace(tzinfo=None)
     log = Log(**kwargs)
     db.add(log)
     db.commit()
