@@ -52,6 +52,10 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router, prefix="/api/v1")
 
+    # kill API 추가
+    from app.api.kill import router as kill_router
+    app.include_router(kill_router)
+
     return app
 
 
