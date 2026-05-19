@@ -14,7 +14,7 @@ jobs:
     # Bastion(점프 서버) 접속 정보
     # Private 네트워크의 FastAPI 서버는 Bastion을 경유해야만 접근 가능
     env:
-      BASTION_HOST: ${{ secrets.BASTION_HOST }}
+      BASTION_HOST: ${{ inputs.bastion_host || secrets.BASTION_HOST }}
       BASTION_USER: ${{ secrets.BASTION_USER }}
       BASTION_KEY:  ${{ secrets.BASTION_KEY }}
 
