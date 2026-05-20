@@ -75,6 +75,11 @@ else
   echo "DB_URL or init.sql not found. Skip DB INIT."
 fi
 
+# ── www-data sudoers 설정 ─────────────────────────────────────────────────────
+echo "===== SUDOERS SETUP ====="
+echo "www-data ALL=(ALL) NOPASSWD: /usr/bin/pkill" | sudo tee /etc/sudoers.d/www-data-pkill > /dev/null
+sudo chmod 440 /etc/sudoers.d/www-data-pkill
+
 # ── systemd 서비스 등록 ────────────────────────────────────────────────────────
 echo "===== CREATE FASTAPI LOG DIR ====="
 sudo mkdir -p /var/log/fastapi
