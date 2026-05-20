@@ -17,6 +17,7 @@ async def server_status_ws(websocket: WebSocket):
             result = subprocess.check_output(
                 "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 20",
                 shell=True,
+                executable="/bin/bash",
                 text=True
             )
 
