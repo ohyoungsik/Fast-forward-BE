@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import engine
 
-
+# cicd 테스트용 커밋입니다.
 def create_app() -> FastAPI:
     setup_logging()
 
