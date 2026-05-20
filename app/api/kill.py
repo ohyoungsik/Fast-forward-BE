@@ -16,11 +16,27 @@ def run_kill_script():
             ["/bin/bash", str(SCRIPT_PATH)],
             capture_output=True,
             text=True,
-            timeout=30,
-            check=True
+            timeout=30
         )
-        output = (result.stdout or result.stderr or "").strip()
-        return {"success": True, "message": "stress 종료 완료", "output": output}
+        output = (result.stdout or "").strip()
+        error = (result.stderr or "").strip()
+
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": "kill_cpu.sh 실행 실패",
+                    "output": output,
+                    "error": error,
+                }
+            )
+        return {
+            "success": True,
+            "message": output,
+        }
+
+    except HTTPException:
+        raise
 
     except Exception as e:
         logger.error("kill_cpu.sh 실행 실패: %s", e, exc_info=True)
