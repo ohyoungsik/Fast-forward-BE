@@ -9,7 +9,7 @@ fi
 
 echo "Found stress process: $pids"
 
-sudo -n /usr/bin/pkill -f "stress"
+/usr/bin/sudo -n /usr/bin/pkill -f "stress"
 
 if [ $? -eq 0 ]; then
   echo "Killed stress"
