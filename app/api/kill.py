@@ -12,14 +12,15 @@ SCRIPT_PATH = Path(__file__).resolve().parent.parent.parent / "scripts" / "kill_
 @router.post("/api/kill/run")
 def run_kill_script():
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["/bin/bash", str(SCRIPT_PATH)],
             capture_output=True,
             text=True,
             timeout=30,
             check=True
         )
-        return {"success": True, "message": "stress 종료 완료"}
+        output = (result.stdout or result.stderr or "").strip()
+        return {"success": True, "message": "stress 종료 완료", "output": output}
 
     except Exception as e:
         logger.error("kill_cpu.sh 실행 실패: %s", e, exc_info=True)
