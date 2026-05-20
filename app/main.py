@@ -56,6 +56,10 @@ def create_app() -> FastAPI:
     from app.api.kill import router as kill_router
     app.include_router(kill_router)
 
+    # server status WebSocket 추가
+    from app.api.server_status import router as server_status_router
+    app.include_router(server_status_router)
+
     return app
 
 
