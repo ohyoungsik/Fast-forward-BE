@@ -1,16 +1,15 @@
 #!/bin/bash
 
-pids=$(pgrep -f "stress|stress-ng")
+pids=$(/usr/bin/pgrep -f "stress")
 
 if [ -z "$pids" ]; then
   echo "No stress process found"
   exit 0
 fi
 
-echo "Found stress process:"
-ps -fp $pids
+echo "Found stress process: $pids"
 
-sudo -n pkill -f "stress|stress-ng"
+sudo -n /usr/bin/pkill -f "stress"
 
 if [ $? -eq 0 ]; then
   echo "Killed stress"
