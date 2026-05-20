@@ -51,8 +51,8 @@ CREATE INDEX        IF NOT EXISTS ix_refreshtoken_user_id        ON public.refre
 
 CREATE TABLE IF NOT EXISTS nginx_logs (
     id SERIAL NOT NULL,
-    log_type   VARCHAR(10),       -- 'access' | 'error'
-    server_name VARCHAR(50),      -- 로그를 전송한 서버명
+    log_type   VARCHAR(30),       -- 'access' | 'error'
+    server_name VARCHAR(100),      -- 로그를 전송한 서버명
     client_ip  VARCHAR,
     method     VARCHAR,
     request_path VARCHAR,
