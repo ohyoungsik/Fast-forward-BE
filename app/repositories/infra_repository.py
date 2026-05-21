@@ -53,7 +53,7 @@ def get_metrics_history(db: Session, server_id: int, limit: int = 20) -> list[di
             ServerMetrics.server_id == server_id,
             ServerMetrics.metric_type.in_(["cpu", "memory", "disk"]),
         )
-        .order_by(desc(ServerMetrics.collected_at))
+        .order_by(desc(ServerMetrics.id))
         .limit(limit * 3)
         .all()
     )
@@ -64,7 +64,7 @@ def get_metrics_history(db: Session, server_id: int, limit: int = 20) -> list[di
         grouped[r.collected_at][r.metric_type] = r.metric_value
 
     result = []
-    for ts in sorted(grouped.keys()):
+    for ts in sorted(grouped.keys(), reverse=True):
         vals = grouped[ts]
         result.append(
             {
@@ -74,8 +74,7 @@ def get_metrics_history(db: Session, server_id: int, limit: int = 20) -> list[di
                 "disk": vals.get("disk", 0.0),
             }
         )
-    # 오래된 데이터부터 정렬된 상태에서 마지막 limit개만 반환 (차트용 최신 N개)
-    return result[-limit:]
+    return result[:limit]
 
 
 def get_security_logs(db: Session, server_name: str | None, keyword: str | None) -> list[Log]:
