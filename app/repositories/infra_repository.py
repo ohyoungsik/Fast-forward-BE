@@ -15,7 +15,7 @@ def get_all_servers(db: Session) -> list[ServerInfo]:
 
 def get_server_by_name(db: Session, server_name: str) -> ServerInfo | None:
     # server_name으로 단일 서버 조회. 없으면 None 반환
-    return db.query(ServerInfo).filter(ServerInfo.server_name == server_name).first()
+    return db.query(ServerInfo).filter(ServerInfo.server_name == server_name).order_by(ServerInfo.id.desc()).first()
 
 
 def get_latest_metrics(db: Session, server_id: int) -> dict[str, tuple[float, object]]:
