@@ -2,7 +2,7 @@ print("[START] metrics_collector.py 시작")
 
 import asyncio
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 print("[IMPORT] 표준 라이브러리 로드 완료")
@@ -120,8 +120,8 @@ def parse_instance_ip(instance: str) -> str:
 
 
 async def collect_and_store(pool: asyncpg.Pool, ip_to_id: dict[str, int]) -> None:
-    # collected_at = datetime.now(timezone.utc)
-    collected_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    KST = timezone(timedelta(hours=9))
+    collected_at = datetime.now(KST).replace(tzinfo=None)
     records: list[tuple] = []
 
     print(f"\n{'='*50}")

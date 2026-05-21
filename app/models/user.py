@@ -1,7 +1,11 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, func
+from datetime import datetime, timedelta, timezone
+
 from pydantic import ConfigDict
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 
 from app.db.base import Base
+
+_KST = timezone(timedelta(hours=9))
 
 
 class User(Base):
@@ -12,7 +16,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(_KST), nullable=False)
     failed_login_count = Column(Integer, default=0, nullable=False, server_default="0")
     locked_until = Column(DateTime(timezone=True), nullable=True)
 
