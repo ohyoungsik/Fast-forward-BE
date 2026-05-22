@@ -6,7 +6,11 @@
       "Bash(Get-ChildItem -Path \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\" -Directory)",
       "Bash(Select-Object Name)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\" -Exclude \".venv\" | ForEach-Object { $_.Name })",
-      "Read(//d/baseP_Fast-Forward_Team/project_files/fast-forward-infra/**)"
+      "Read(//d/baseP_Fast-Forward_Team/project_files/fast-forward-infra/**)",
+      "Bash(Get-ChildItem -Path \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\" -Recurse)",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\" -Recurse -ErrorAction SilentlyContinue | Select-Object -Property @{Name=\"Path\";Expression={$_.FullName.Replace\\(\"d:\\\\baseP_Fast-Forward_Team\\\\project_files\\\\fast-forward-BE\\\\\", \"\"\\)}}, PSIsContainer | Sort-Object Path | Format-Table -AutoSize -Wrap)"
     ],
     "additionalDirectories": [
       "D:\\baseP_Fast-Forward_Team\\project_files\\fast-forward-FE\\src\\api",
